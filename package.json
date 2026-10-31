@@ -10,13 +10,15 @@
   },
   "scripts": {
     "start": "node server/index.js",
-    "test": "node --test",
+    "test": "node --test \"test/**/*.test.js\"",
     "check": "node scripts/check.js",
     "dev:offline": "node scripts/dev-offline.js",
     "test:core": "node --test \"test/core/**/*.test.js\"",
     "test:app": "node --test \"test/app/**/*.test.js\"",
     "graph:import": "bash scripts/import-graph.sh",
-    "replay:warm": "node scripts/warm-cache.js"
+    "replay:warm": "node scripts/warm-cache.js",
+    "preflight": "node scripts/preflight.js",
+    "verify": "npm test && npm run preflight"
   },
   "dependencies": {
     "@google/genai": "^1.27.0",

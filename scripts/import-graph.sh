@@ -12,6 +12,10 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 git diff --quiet || { echo "Demo repo has uncommitted changes; the graph must match a pushed commit."; exit 1; }
 COMMIT="$(git rev-parse HEAD)"
 OWNER_REPO="$(git remote get-url origin 2>/dev/null | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##' || true)"
+if [ -z "$OWNER_REPO" ]; then
+  APP_OWNER="$(git -C "$APP" remote get-url origin 2>/dev/null | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##; s#/.*##' || true)"
+  OWNER_REPO="${APP_OWNER:-CHANGE_ME}/pr-reality-check-demo"
+fi
 GRAPHIFY_BACKEND=none graphify extract . --code-only
 [ -f graphify-out/graph.html ] || GRAPHIFY_BACKEND=none graphify cluster-only . --no-label || true
 cp graphify-out/graph.json "$APP/data/graph.json"
@@ -21,7 +25,7 @@ VERSION="$(graphify --version 2>/dev/null | head -1 | tr -d '\r')"
 OWNER="${OWNER_REPO%%/*}"; NAME="${OWNER_REPO##*/}"
 cat > "$APP/data/manifest.json" <<JSON
 {
-  "repo": { "owner": "${OWNER:-CHANGE_ME}", "name": "${NAME:-pr-reality-check-demo}" },
+  "repo": { "owner": "${OWNER}", "name": "${NAME}" },
   "graphCommit": "$COMMIT",
   "graphifyVersion": "${VERSION:-unknown}"
 }

@@ -1,5 +1,12 @@
 const API_ROOT = 'https://api.github.com';
 const GRAPHQL_URL = 'https://api.github.com/graphql';
+const REQUEST_TIMEOUT_MS = boundedInteger(process.env.GITHUB_TIMEOUT_MS, 10_000, 1_000, 30_000);
+const MAX_FILE_PAGES = boundedInteger(process.env.GITHUB_MAX_FILE_PAGES, 10, 1, 20);
+
+function boundedInteger(value, fallback, min, max) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= min && parsed <= max ? parsed : fallback;
+}
 
 function repoConfig() {
   return {
@@ -38,10 +45,21 @@ function apiError(status, responseBody, responseHeaders) {
 }
 
 async function request(url, options = {}, attempt = 0) {
-  const response = await fetch(url, {
-    ...options,
-    headers: { ...headers(), ...(options.headers ?? {}) }
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers: { ...headers(), ...(options.headers ?? {}) },
+      signal: options.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    });
+  } catch (error) {
+    if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+      const timeoutError = new Error(`GitHub request timed out after ${REQUEST_TIMEOUT_MS}ms.`);
+      timeoutError.status = 504;
+      throw timeoutError;
+    }
+    throw error;
+  }
 
   let body = null;
   const text = await response.text();
@@ -73,11 +91,19 @@ export async function getPR(number) {
 
 export async function getPRFiles(number) {
   const files = [];
-  for (let page = 1; ; page += 1) {
+  for (let page = 1; page <= MAX_FILE_PAGES; page += 1) {
     const { body } = await request(restUrl(`/pulls/${number}/files?per_page=100&page=${page}`));
+    if (!Array.isArray(body)) {
+      const error = new Error('GitHub returned an invalid pull-request files response.');
+      error.status = 502;
+      throw error;
+    }
     files.push(...body);
     if (body.length < 100) return files;
   }
+  const error = new Error(`Pull request exceeds the ${MAX_FILE_PAGES * 100}-file analysis safety limit.`);
+  error.status = 413;
+  throw error;
 }
 
 export async function getIssue(number) {
@@ -85,7 +111,13 @@ export async function getIssue(number) {
 }
 
 export async function listOpenPRs() {
-  return (await request(restUrl('/pulls?state=open&per_page=10'))).body;
+  const body = (await request(restUrl('/pulls?state=open&per_page=10'))).body;
+  if (!Array.isArray(body)) {
+    const error = new Error('GitHub returned an invalid pull-request list response.');
+    error.status = 502;
+    throw error;
+  }
+  return body;
 }
 
 export function linkedIssueFromBody(body) {

@@ -4,9 +4,9 @@
 
 Hacktoberfest maintainers need more than surface signals such as PR size or description quality. PR Reality Check compares a pull request's claim and linked issue with the part of the codebase it actually changes, then presents a traceable evidence card. It checks relevance, not correctness, and never claims to detect AI authorship.
 
-**Live demo:** `https://<cloudways-url>`
+**Demo:** run `npm run dev:offline` for a zero-credential walkthrough, or follow the live setup below.
 
-**Screenshot:** _Add a mobile evidence-card screenshot after deployment._
+**Judge fast:** `npm ci && npm run verify`, then open the offline demo at `http://localhost:3000`.
 
 Graphify gives us the structure; our contribution is checking the claim against the code, with a traceable evidence card.
 
@@ -32,7 +32,19 @@ Graphify gives us the structure; our contribution is checking the claim against 
                                    Evidence card UI (with/without graph, graph.html link) │ PR comment (stretch)
 ```
 
-The app shell fetches GitHub data, assembles the shared analyzer input, caches cards by source state, and serves a mobile-first interface. The graph, anchor, metric, evidence, validation, and Gemma implementation lives behind `server/analyze.js`; until that module is merged, the app automatically uses an explicitly synthetic stub card.
+The app shell fetches GitHub data, assembles the shared analyzer input, caches cards by source state, and serves a mobile-first interface. The graph, anchor, metric, evidence, validation, and Gemma implementation lives behind `server/analyze.js`; a deterministic evidence-only fallback keeps the product usable when the model is unavailable.
+
+## Round 1 rubric evidence
+
+| Criterion | Evidence in this repository |
+| --- | --- |
+| Alignment to problem | Claim-versus-reality cards, linked-issue anchors, code-graph paths, overlap detection, and explicit “relevance ≠ correctness” limits. |
+| Code quality | Contract-first Zod schemas, deterministic engine modules, bounded inputs, and core/app/end-to-end tests. |
+| Security features | Read-only least-privilege tokens, CSP and browser hardening headers, API rate limiting, sandboxed graph HTML, safe evidence links, secret-safe health checks, and private vulnerability reporting. |
+| Production readiness | Pinned dependencies, CI, preflight checks, health endpoint, upstream timeouts, atomic cache writes, request IDs, graceful shutdown, offline fallback, and committed graph assets. |
+| Red-flag control | No auto-actions, no secret in client responses, no raw model verdict, no HTML injection of untrusted text, and no silent guessing when evidence is missing. |
+
+See [`docs/JUDGING.md`](docs/JUDGING.md) for a two-minute demo script and verification checklist.
 
 ## Evidence card
 
@@ -57,7 +69,7 @@ Each card shows:
 Requires Node 22 (Node 20 or newer is supported by the package metadata).
 
 ```bash
-npm install
+npm ci
 cp .env.example .env
 npm start
 ```
@@ -71,7 +83,7 @@ Configure these environment variables:
 - `DEMO_REPO_OWNER` — GitHub owner of the demo repository.
 - `DEMO_REPO_NAME` — default `pr-reality-check-demo`.
 
-Optional: `EDGE_SOURCE_IS_CALLER` (default `true`), `GEMMA_THINKING_LEVEL` (set `minimal` if calls are slow), `GEMMA_TIMEOUT_MS` (default `45000`). `GET /api/health` reports `graphLoaded`, `githubTokenSet` and `geminiKeySet` as booleans so you can see what is missing without exposing secrets.
+Optional: `EDGE_SOURCE_IS_CALLER` (default `true`), `GEMMA_THINKING_LEVEL` (set `minimal` if calls are slow), `GEMMA_TIMEOUT_MS` (default `45000`), `GITHUB_TIMEOUT_MS` (default `10000`), `GITHUB_MAX_FILE_PAGES` (default `10`), and `API_RATE_LIMIT` (default `120` requests per client per minute). `GET /api/health` reports `graphLoaded`, `githubTokenSet` and `geminiKeySet` as booleans so you can see what is missing without exposing secrets.
 
 Generate the base graph from the synthetic demo repository (after its `main` is pushed) on a trusted laptop:
 
@@ -85,7 +97,8 @@ The script runs `GRAPHIFY_BACKEND=none graphify extract . --code-only` on the de
 Useful commands:
 
 ```bash
-npm test                                   # 80+ tests: engine, app routes, end-to-end HTTP, Gemini SDK wiring
+npm run verify                             # tests plus deployment/security preflight
+npm test                                   # engine, routes, HTTP, security, and Gemini SDK wiring
 npm run dev:offline                        # full app on SYNTHETIC fixtures, no tokens or network needed
 npm run check -- 3 --no-llm                # deterministic evidence for a real PR
 npm run check -- 3                         # + Gemma 4
@@ -102,6 +115,7 @@ server/                    Node ESM, no build step
   input.js                 buildInput(pr, mode): PR + files + linked issue + open PRs + graph
   github.js                GitHub REST/GraphQL via fetch (read-only)
   cache.js                 cache key, data/cache, data/replay
+  security.js              CSP, hardening headers, request IDs, no-store API, rate limiting
   load-analyzer.js         loads analyze.js (stub only if the file is missing)
   analyze.js               core engine orchestrator: AnalyzeInput -> Card (never throws)
   graph.js                 Graphify graph.json normalize, diff -> nodes, blast radius, god nodes
@@ -122,6 +136,7 @@ scripts/
   check.js                 debug CLI: npm run check -- <pr> [--no-llm] | --inspect data/graph.json
   warm-cache.js            record replay cards from a live URL
   dev-offline.js           whole app on synthetic fixtures, no keys
+  preflight.js             deployment, graph, lockfile, and secret-safety checks
 skills/pr-reality-check/   contributor agent skill (SKILL.md)
 test/core/                 engine tests + synthetic Graphify graph and PR A/B/C inputs
 test/app/                  routes, GitHub, cache, end-to-end HTTP tests
@@ -148,6 +163,9 @@ The sample cards under `data/fixtures/` are also labeled `_synthetic: true`; rep
 - PR, issue, code, author, and model text are untrusted data. The browser inserts them using `textContent`, never data-derived HTML.
 - Evidence links are enabled only for `https://github.com/`.
 - The model has no write tools, and the product exposes no action that changes a pull request.
+- API calls are rate-limited, GitHub calls have bounded timeouts and pagination, and internal server errors are not sent to clients.
+- The main UI uses a per-response CSP nonce; generated graph HTML runs in a sandboxed context with network access disabled.
+- See [`SECURITY.md`](SECURITY.md) for private reporting guidance and the documented trust boundaries.
 
 ## Deploy (Cloudways Velocity)
 

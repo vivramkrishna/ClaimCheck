@@ -5,3 +5,4 @@ npm-debug.log*
 data/cache/*.json
 graphify-out/
 archive/
+demo-upload/

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -47,7 +48,15 @@ export async function get(prNumber, mode, key) {
 
 export async function set(prNumber, mode, key, card) {
   await mkdir(cacheDir, { recursive: true });
-  await writeFile(cachePath(prNumber, mode, key), `${JSON.stringify(card, null, 2)}\n`);
+  const target = cachePath(prNumber, mode, key);
+  const temporary = `${target}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, `${JSON.stringify(card, null, 2)}\n`, { mode: 0o600 });
+    await rename(temporary, target);
+  } catch (error) {
+    await unlink(temporary).catch(() => {});
+    throw error;
+  }
   return card;
 }
 

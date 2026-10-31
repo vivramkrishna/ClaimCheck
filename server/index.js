@@ -7,27 +7,43 @@ import { buildInput, graphDataDir } from './input.js';
 import { cacheKey, get as getCache, getReplay, listReplays, set as setCache } from './cache.js';
 import { listOpenPRs, resolveLinkedIssue } from './github.js';
 import { loadAnalyzer } from './load-analyzer.js';
+import {
+  createRateLimiter,
+  graphSandboxHeaders,
+  noStoreApi,
+  requestContext,
+  securityHeaders
+} from './security.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const packageJson = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+const indexTemplate = await readFile(path.join(root, 'public', 'index.html'), 'utf8');
 
 const { analyzer, kind: loadedKind } = await loadAnalyzer();
 export const analyzerKind = loadedKind;
 
 export const app = express();
+const inFlightAnalyses = new Map();
 app.disable('x-powered-by');
+app.set('trust proxy', 1);
+app.use(requestContext);
+app.use(securityHeaders);
+app.use('/api', noStoreApi, createRateLimiter());
 app.use(express.json({ limit: '32kb' }));
 
-function jsonError(response, error) {
+function jsonError(request, response, error) {
   const status = Number.isInteger(error?.status) ? error.status : 500;
+  if (status >= 500) console.error(`[${request.requestId ?? 'no-request-id'}]`, error);
   response.status(status).json({
-    error: status === 500 && !error?.message ? 'Internal server error' : error.message,
-    status
+    error: status >= 500 ? 'Internal server error' : error.message,
+    status,
+    requestId: request.requestId
   });
 }
 
 function validatedRequest(request) {
-  if (!/^\d+$/.test(request.params.n) || Number(request.params.n) < 1) {
+  const number = Number(request.params.n);
+  if (!/^\d+$/.test(request.params.n) || !Number.isSafeInteger(number) || number < 1) {
     const error = new Error('PR number must be a positive integer.');
     error.status = 400;
     throw error;
@@ -38,7 +54,7 @@ function validatedRequest(request) {
     error.status = 400;
     throw error;
   }
-  return { number: Number(request.params.n), mode };
+  return { number, mode };
 }
 
 function withMode(card, mode) {
@@ -48,19 +64,36 @@ function withMode(card, mode) {
   return copy;
 }
 
+async function analyzeOnce(number, mode, key, input) {
+  const inFlightKey = `${number}:${mode}:${key}`;
+  if (inFlightAnalyses.has(inFlightKey)) return inFlightAnalyses.get(inFlightKey);
+  const pending = (async () => {
+    const card = await analyzer.analyze(input);
+    const modelAnswered = card?.provenance?.assessmentSource !== 'fallback';
+    if (modelAnswered || !process.env.GEMINI_API_KEY) await setCache(number, mode, key, card);
+    return card;
+  })();
+  inFlightAnalyses.set(inFlightKey, pending);
+  try {
+    return await pending;
+  } finally {
+    inFlightAnalyses.delete(inFlightKey);
+  }
+}
+
 app.get('/api/health', async (_request, response) => {
   let manifest = null;
   let graphNodes = null;
   try {
     manifest = JSON.parse(await readFile(path.join(graphDataDir(), 'manifest.json'), 'utf8'));
   } catch (error) {
-    if (error.code !== 'ENOENT') return jsonError(response, error);
+    if (error.code !== 'ENOENT') return jsonError(_request, response, error);
   }
   try {
     const graph = JSON.parse(await readFile(path.join(graphDataDir(), 'graph.json'), 'utf8'));
     graphNodes = Array.isArray(graph.nodes) ? graph.nodes.length : 0;
   } catch (error) {
-    if (error.code !== 'ENOENT') return jsonError(response, error);
+    if (error.code !== 'ENOENT') return jsonError(_request, response, error);
   }
   // Booleans only: never echo secrets or their lengths.
   response.json({
@@ -99,7 +132,7 @@ app.get('/api/prs', async (_request, response) => {
       response.set('X-PR-Source', 'replay');
       return response.json(replays);
     }
-    jsonError(response, error);
+    jsonError(_request, response, error);
   }
 });
 
@@ -123,22 +156,25 @@ app.get('/api/analyze/:n', async (request, response) => {
       if (cached) return response.json(withMode(cached, 'cached'));
     }
 
-    const card = await analyzer.analyze(input);
-    const modelAnswered = card?.provenance?.assessmentSource !== 'fallback';
-    if (modelAnswered || !process.env.GEMINI_API_KEY) await setCache(number, mode, key, card);
+    const card = await analyzeOnce(number, mode, key, input);
     response.json(card);
   } catch (error) {
-    jsonError(response, error);
+    jsonError(request, response, error);
   }
 });
 
-app.get('/graph', (_request, response) => {
+app.get('/graph', graphSandboxHeaders, (_request, response) => {
   response.sendFile(path.join(graphDataDir(), 'graph.html'), (error) => {
     if (!error || response.headersSent) return;
     response.status(error.statusCode === 404 ? 404 : 500).type('html').send(
       '<!doctype html><title>Graph unavailable</title><main><h1>Graph unavailable</h1><p>Copy Graphify\'s graph.html into data/ and try again.</p></main>'
     );
   });
+});
+
+app.get('/', (_request, response) => {
+  const nonce = response.locals.cspNonce;
+  response.type('html').send(indexTemplate.replace('<script>', `<script nonce="${nonce}">`));
 });
 
 app.use(express.static(path.join(root, 'public')));
@@ -149,7 +185,18 @@ app.use('/api', (_request, response) => {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.PORT) || 3000;
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`PR Reality Check listening on http://localhost:${port}`);
   });
+  const shutdown = (signal) => {
+    console.log(`${signal} received; closing HTTP server.`);
+    server.close((error) => {
+      if (error) {
+        console.error('Graceful shutdown failed:', error);
+        process.exitCode = 1;
+      }
+    });
+  };
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
+  process.once('SIGINT', () => shutdown('SIGINT'));
 }

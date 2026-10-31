@@ -56,7 +56,12 @@ let server;
 let base;
 before(async () => {
   server = app.listen(0);
-  await new Promise((resolve) => server.once('listening', resolve));
+  if (!server.listening) {
+    await new Promise((resolve, reject) => {
+      server.once('listening', resolve);
+      server.once('error', reject);
+    });
+  }
   base = `http://127.0.0.1:${server.address().port}`;
 });
 after(async () => {
@@ -76,13 +81,19 @@ const getJson = async (p) => {
 };
 
 test('health: real analyzer, graph loaded, keys reported as booleans', async () => {
-  const { json } = await getJson('/api/health');
+  const { headers, json } = await getJson('/api/health');
   assert.equal(json.analyzer, 'real');
   assert.equal(json.graphLoaded, true);
   assert.equal(json.graphCommit, inputs[2].manifest.graphCommit);
   assert.equal(json.githubTokenSet, true);
   assert.equal(json.geminiKeySet, false);
   assert.ok(!JSON.stringify(json).includes('test-token'));
+  assert.equal(headers.get('cache-control'), 'no-store');
+  assert.match(headers.get('content-security-policy'), /default-src 'self'/);
+  assert.equal(headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(headers.get('x-frame-options'), 'DENY');
+  assert.match(headers.get('x-request-id'), /^[0-9a-f-]{36}$/);
+  assert.ok(Number(headers.get('ratelimit-remaining')) >= 0);
 });
 
 test('GET /api/prs lists the three demo PRs with linked issue #1', async () => {
@@ -133,10 +144,17 @@ test('second request is served from cache with provenance.mode=cached', async ()
 test('/graph serves graph.html and / serves the UI', async () => {
   const graph = await realFetch(`${base}/graph`);
   assert.equal(graph.status, 200);
+  assert.match(graph.headers.get('content-security-policy'), /^sandbox allow-scripts/);
+  assert.match(graph.headers.get('content-security-policy'), /https:\/\/unpkg\.com/);
   assert.match(await graph.text(), /synthetic graph view/);
   const ui = await realFetch(`${base}/`);
   assert.equal(ui.status, 200);
-  assert.match(await ui.text(), /PR Reality Check/);
+  const csp = ui.headers.get('content-security-policy');
+  const body = await ui.text();
+  const nonce = body.match(/<script nonce="([^"]+)">/)?.[1];
+  assert.match(body, /PR Reality Check/);
+  assert.ok(nonce);
+  assert.ok(csp.includes(`'nonce-${nonce}'`));
 });
 
 test('bad input returns JSON errors, not HTML', async () => {
