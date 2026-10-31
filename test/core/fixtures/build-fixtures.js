@@ -90,7 +90,7 @@ const issue = {
   number: 1,
   title: 'Users are logged out a few seconds after logging in',
   body: [
-    'Steps: POST /login (demo creds) → GET /profile after ~5 s. Expected 200, got:',
+    'Steps: POST /login (test account) → GET /profile after ~5 s. Expected 200, got:',
     '',
     '```',
     'Error: 401 Session expired',

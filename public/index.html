@@ -1,483 +1,875 @@
 <!doctype html>
-<html lang="en" class="bg-slate-950">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Graph-grounded pull request evidence for maintainers.">
+  <meta name="description" content="See whether a pull request changes the code its issue is about.">
   <title>PR Reality Check</title>
-  <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    :focus-visible { outline: 3px solid #38bdf8; outline-offset: 3px; }
-    .scrollbar-thin { scrollbar-color: #475569 transparent; scrollbar-width: thin; }
+    :root {
+      --bg: #f4f2ec; --surface: #ffffff; --surface-2: #f9f8f4; --ink: #1d1c19; --muted: #6c685f; --faint: #9b968b;
+      --line: #e3dfd5; --accent: #3a4bd8; --accent-soft: #e8eafc;
+      --good: #1f7a52; --good-soft: #e3f3ea; --warn: #a86a12; --warn-soft: #fbf0dc; --bad: #b8402a; --bad-soft: #fbe6e1;
+      --node: #c9c4b8; --edge: #d9d4c8; --shadow: 0 1px 2px rgba(30, 28, 22, .05), 0 4px 16px rgba(30, 28, 22, .05);
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #131312; --surface: #1b1b19; --surface-2: #222220; --ink: #ecebe6; --muted: #a29e94; --faint: #74716a;
+        --line: #2e2d2a; --accent: #8e98ff; --accent-soft: #23264a;
+        --good: #52c48d; --good-soft: #17301f; --warn: #e3ac4f; --warn-soft: #33270f; --bad: #f08068; --bad-soft: #3a1d17;
+        --node: #4a4843; --edge: #34332f; --shadow: none;
+        color-scheme: dark;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      background: var(--bg); color: var(--ink);
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); }
+    button { font: inherit; color: inherit; cursor: pointer; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+    code, .mono { font-family: ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace; font-size: .86em; }
+
+    .top { border-bottom: 1px solid var(--line); background: var(--surface); }
+    .top-inner { max-width: 1240px; margin: 0 auto; padding: 14px 20px; display: flex; align-items: center; gap: 16px; justify-content: space-between; flex-wrap: wrap; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .mark { width: 32px; height: 32px; border-radius: 9px; background: var(--ink); color: var(--bg); display: grid; place-items: center; }
+    .mark svg { width: 18px; height: 18px; }
+    .brand h1 { margin: 0; font-size: 17px; letter-spacing: -.01em; }
+    .brand p { margin: 0; font-size: 13px; color: var(--muted); }
+    .status { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); white-space: nowrap; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+    .dot.on { background: var(--good); } .dot.off { background: var(--warn); }
+
+    .layout { max-width: 1240px; margin: 0 auto; padding: 20px; display: grid; gap: 20px; grid-template-columns: 280px minmax(0, 1fr); align-items: start; }
+    @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); padding: 16px; } .side, .stack { min-width: 0; } }
+
+    .side { position: sticky; top: 16px; }
+    @media (max-width: 900px) { .side { position: static; } }
+    .side h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 4px 4px 10px; font-weight: 600; }
+    .pr-list { display: flex; flex-direction: column; gap: 6px; }
+    @media (max-width: 900px) { .pr-list { flex-direction: row; overflow-x: auto; padding-bottom: 4px; } .pr-item { min-width: 230px; } }
+    .pr-item { text-align: left; border: 1px solid transparent; background: transparent; border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; }
+    .pr-item:hover { background: var(--surface); border-color: var(--line); }
+    .pr-item[aria-current="true"] { background: var(--surface); border-color: var(--ink); box-shadow: var(--shadow); }
+    .pr-num { font-size: 12px; color: var(--muted); }
+    .pr-title { font-weight: 600; font-size: 14px; line-height: 1.35; }
+
+    .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+    .stack { display: grid; gap: 16px; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .toolbar h2 { margin: 0; font-size: 20px; letter-spacing: -.015em; line-height: 1.3; }
+    .toolbar .meta { font-size: 13px; color: var(--muted); }
+    .seg { display: inline-flex; padding: 3px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; }
+    .seg button { border: 0; background: transparent; padding: 6px 12px; border-radius: 7px; font-size: 13px; color: var(--muted); }
+    .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); font-weight: 600; }
+    .icon-btn { border: 1px solid var(--line); background: var(--surface); border-radius: 9px; padding: 6px 12px; font-size: 13px; }
+    .icon-btn:hover { border-color: var(--ink); }
+
+    .verdict { padding: 22px 24px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; border-left: 5px solid var(--tone); }
+    @media (max-width: 600px) { .verdict { grid-template-columns: 1fr; } }
+    .verdict .label { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--tone); }
+    .verdict h3 { margin: 6px 0 6px; font-size: 24px; letter-spacing: -.02em; line-height: 1.2; }
+    .verdict p { margin: 0; color: var(--muted); }
+    .score { display: flex; gap: 18px; }
+    .ring { position: relative; width: 84px; height: 84px; }
+    .ring svg { transform: rotate(-90deg); }
+    .ring span { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 700; font-size: 18px; }
+    .score small { display: block; text-align: center; font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .note { font-size: 12.5px; color: var(--muted); margin-top: 10px !important; display: flex; align-items: center; gap: 6px; }
+
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 700px) { .two { grid-template-columns: 1fr; } }
+    .box { padding: 18px 20px; }
+    .box h4 { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    .box p { margin: 0; }
+
+    .findings { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+    .findings li { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 12px; align-items: baseline; }
+    .sev { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); transform: translateY(-1px); }
+    .sev.warn { background: var(--warn); } .sev.risk { background: var(--bad); }
+    .refs { display: inline-flex; gap: 4px; margin-left: 6px; }
+    .refs a, .refs span { font-size: 11px; text-decoration: none; padding: 1px 6px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--line); color: var(--muted); }
+    .refs a:hover { color: var(--accent); border-color: var(--accent); }
+
+    .simple { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag { font-size: 12.5px; padding: 3px 9px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--line); }
+    .empty { color: var(--faint); font-size: 14px; }
+
+    .graph-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 16px 20px 0; }
+    .graph-head h4 { margin: 0; }
+    .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--muted); }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .graph-wrap { position: relative; height: 420px; margin: 8px 12px 0; border-radius: 10px; background: var(--surface-2); overflow: hidden; touch-action: none; }
+    .graph-wrap svg { width: 100%; height: 100%; display: block; cursor: grab; user-select: none; }
+    .graph-wrap svg:active { cursor: grabbing; }
+    .graph-wrap .msg { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); font-size: 14px; padding: 20px; text-align: center; }
+    .graph-info { padding: 10px 20px 16px; font-size: 13px; color: var(--muted); min-height: 20px; }
+    .graph-info b { color: var(--ink); }
+    .n-label { font-size: 12px; fill: var(--ink); paint-order: stroke; stroke: var(--surface-2); stroke-width: 3px; pointer-events: none; }
+    .n-label.dim { fill: var(--muted); font-size: 11px; }
+
+    .overlay { position: fixed; inset: 0; background: rgba(10, 10, 9, .55); display: none; z-index: 50; padding: 24px; }
+    .overlay.open { display: grid; }
+    .overlay .panel { display: grid; grid-template-rows: auto 1fr auto; height: calc(100vh - 48px); }
+    .overlay .graph-wrap { height: auto; margin-bottom: 0; }
+
+    details.more { padding: 0; }
+    details.more > summary { list-style: none; padding: 16px 20px; cursor: pointer; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+    details.more > summary::-webkit-details-marker { display: none; }
+    details.more > summary::after { content: "Show"; font-weight: 400; font-size: 13px; color: var(--muted); }
+    details.more[open] > summary::after { content: "Hide"; }
+    .more-body { padding: 0 20px 20px; display: grid; gap: 18px; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+    .stat { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+    .stat b { display: block; font-size: 18px; }
+    .stat span { font-size: 12px; color: var(--muted); }
+    .ev { display: grid; gap: 8px; }
+    .ev div { font-size: 13.5px; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px; }
+    .ev .id { color: var(--muted); }
+    .ev a { text-decoration: none; }
+    .sub { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+    .state { padding: 48px 24px; text-align: center; color: var(--muted); }
+    .state.error { color: var(--bad); }
+    .spinner { width: 22px; height: 22px; border: 2px solid var(--line); border-top-color: var(--ink); border-radius: 50%; margin: 0 auto 12px; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    footer { text-align: center; font-size: 12.5px; color: var(--faint); padding: 8px 20px 28px; }
+    .hidden { display: none !important; }
+
+    /* Issues board */
+    .issue-group { display: grid; gap: 4px; margin-bottom: 10px; }
+    .issue-head { text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 9px 12px; display: grid; gap: 2px; }
+    .issue-head:hover { border-color: var(--ink); }
+    .issue-head[aria-current="true"] { border-color: var(--ink); box-shadow: var(--shadow); }
+    .issue-head .pr-num { display: flex; justify-content: space-between; gap: 8px; }
+    .issue-prs { display: grid; gap: 2px; padding-left: 10px; border-left: 2px solid var(--line); margin-left: 10px; }
+    .issue-prs .pr-item { padding: 7px 10px; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+    .issue-prs .pr-title { font-size: 13px; font-weight: 500; }
+    .rank { font-size: 11px; font-weight: 700; color: var(--muted); }
+    .fitpill { font-size: 11.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--tone, var(--muted)); white-space: nowrap; }
+    .none { font-size: 12.5px; color: var(--faint); padding: 2px 10px 6px; }
+    @media (max-width: 900px) { #pr-list { flex-direction: column; overflow: visible; } .issue-prs .pr-item { min-width: 0; } }
+
+    .issue-view .box p.excerpt { color: var(--muted); }
+    .rank-table { display: grid; gap: 10px; }
+    .rank-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) 150px; gap: 14px; align-items: center; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); text-align: left; }
+    .rank-row:hover { border-color: var(--ink); }
+    .rank-row.first { border-color: var(--good); background: var(--good-soft); }
+    @media (max-width: 600px) { .rank-row { grid-template-columns: 34px minmax(0, 1fr); } .rank-row .barbox { grid-column: 1 / -1; } }
+    .rank-n { font-size: 20px; font-weight: 800; color: var(--muted); text-align: center; }
+    .rank-row.first .rank-n { color: var(--good); }
+    .rank-row .t { font-weight: 600; }
+    .rank-row .m { font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 10px; margin-top: 4px; }
+    .flag { font-size: 11.5px; padding: 1px 7px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); }
+    .flag.good { color: var(--good); } .flag.warn { color: var(--warn); } .flag.bad { color: var(--bad); }
+    .barbox { display: grid; gap: 4px; }
+    .barbox b { font-size: 18px; color: var(--tone); }
+    .bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+    .bar i { display: block; height: 100%; border-radius: 99px; background: var(--tone); }
+    .fit-parts { display: grid; gap: 8px; }
+    .fit-part { display: grid; grid-template-columns: minmax(0, 1fr) 120px 64px; gap: 12px; align-items: center; font-size: 13.5px; }
+    .fit-part .w { color: var(--muted); font-size: 12px; text-align: right; }
+    .back { border: 0; background: none; color: var(--accent); padding: 0; font-size: 13px; }
   </style>
 </head>
-<body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
-  <header class="border-b border-slate-800 bg-slate-950/95 px-4 py-5 backdrop-blur sm:px-6 lg:px-8">
-    <div class="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <p class="text-xs font-bold uppercase tracking-[0.28em] text-sky-400">Maintainer evidence, not a verdict</p>
-        <h1 class="mt-1 text-2xl font-black tracking-tight sm:text-3xl">PR Reality Check</h1>
-        <p class="mt-2 max-w-3xl text-sm text-slate-300">Does this PR do what it claims? Graph-grounded evidence for maintainers. Never auto-closes.</p>
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <div class="brand">
+        <div class="mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M6 8.5v4a5 5 0 0 0 5 5h4.5M8.5 6h7"/></svg>
+        </div>
+        <div>
+          <h1>PR Reality Check</h1>
+          <p>Does this pull request change the code its issue is about?</p>
+        </div>
       </div>
-      <a href="/graph" target="_blank" rel="noreferrer" class="inline-flex w-fit items-center rounded-full border border-sky-500/50 px-4 py-2 text-sm font-semibold text-sky-300 transition hover:bg-sky-500/10">Open code graph ↗</a>
+      <div class="status">
+        <span class="chip" id="repo-chip" hidden></span>
+        <span class="chip"><i class="dot" id="ai-dot"></i><span id="ai-text">Checking…</span></span>
+      </div>
     </div>
   </header>
 
-  <main class="mx-auto grid max-w-7xl gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[18rem_minmax(0,1fr)] lg:px-8">
-    <aside class="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)]">
-      <div class="flex items-center justify-between">
-        <h2 class="font-bold">Open pull requests</h2>
-        <span id="health" class="rounded-full bg-slate-800 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Checking…</span>
-      </div>
-      <p class="mt-1 text-xs text-slate-400">Synthetic demo repository</p>
-      <div id="pr-list" class="scrollbar-thin mt-4 flex gap-2 overflow-x-auto pb-2 lg:max-h-[calc(100vh-8rem)] lg:flex-col lg:overflow-y-auto lg:overflow-x-hidden" aria-live="polite"></div>
+  <main class="layout">
+    <aside class="side">
+      <h2 id="side-title">Issues and their pull requests</h2>
+      <nav id="pr-list" class="pr-list" aria-label="Issues and pull requests"></nav>
     </aside>
 
-    <section class="min-w-0">
-      <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-3 sm:p-4">
-        <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div class="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Review mode">
-            <button id="mode-graph" type="button" class="rounded-xl px-4 py-3 text-left text-sm font-bold transition">Graph evidence</button>
-            <button id="mode-diffonly" type="button" class="rounded-xl px-4 py-3 text-left text-sm font-bold transition">Diff-only review (what generic reviewers see)</button>
-          </div>
-          <div class="flex flex-wrap items-center gap-3">
-            <label class="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
-              <input id="replay" type="checkbox" class="h-4 w-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500">
-              Replay mode
-            </label>
-            <button id="refresh" type="button" class="rounded-xl border border-slate-700 px-4 py-2 text-sm font-bold text-slate-200 transition hover:border-sky-500 hover:text-sky-300">Refresh</button>
-          </div>
-        </div>
-      </div>
-
-      <div id="status" class="mt-5 rounded-2xl border border-slate-800 bg-slate-900/60 p-8 text-center text-slate-300" aria-live="polite">Choose a pull request to inspect.</div>
-      <article id="card" class="mt-5 hidden space-y-5" aria-live="polite"></article>
+    <section class="stack" aria-live="polite">
+      <div id="state" class="panel state">Choose an issue or a pull request.</div>
+      <div id="issue-view" class="stack issue-view hidden"></div>
+      <div id="card" class="stack hidden"></div>
     </section>
   </main>
 
-  <footer class="border-t border-slate-800 px-4 py-6 text-center text-xs text-slate-500">
-    Checks relevance, not correctness. PR text is treated as untrusted data. This tool never acts on a pull request.
-  </footer>
+  <div id="overlay" class="overlay" role="dialog" aria-modal="true" aria-label="Code graph">
+    <div class="panel">
+      <div class="graph-head" style="padding-bottom:8px">
+        <h4>Code graph</h4>
+        <button class="icon-btn" id="overlay-close" type="button">Close</button>
+      </div>
+      <div class="graph-wrap" id="overlay-graph"></div>
+      <div class="graph-info" id="overlay-info"></div>
+    </div>
+  </div>
+
+  <footer>Checks whether a change is relevant, not whether it is correct. It never acts on a pull request.</footer>
 
   <script>
+    const params = new URLSearchParams(location.search);
     const state = {
       prs: [],
-      selected: Number(new URLSearchParams(location.search).get('pr')) || null,
-      mode: ['graph', 'diffonly'].includes(new URLSearchParams(location.search).get('mode'))
-        ? new URLSearchParams(location.search).get('mode') : 'graph',
-      replay: new URLSearchParams(location.search).get('replay') === '1'
+      board: null,
+      selected: Number(params.get('pr')) || null,
+      issue: Number(params.get('issue')) || null,
+      mode: params.get('mode') === 'diffonly' ? 'diffonly' : 'graph',
+      replay: params.get('replay') === '1',
+      graphs: new Map(),
+      card: null
     };
+    const $ = (id) => document.getElementById(id);
+    const SVGNS = 'http://www.w3.org/2000/svg';
 
-    const byId = (id) => document.getElementById(id);
-    const cardRoot = byId('card');
-    const statusRoot = byId('status');
-
-    function element(tag, classes, text) {
+    function el(tag, cls, text) {
       const node = document.createElement(tag);
-      if (classes) node.className = classes;
+      if (cls) node.className = cls;
       if (text !== undefined && text !== null) node.textContent = String(text);
       return node;
     }
-
-    function value(value, fallback = 'Not available') {
-      return value === null || value === undefined || value === '' ? fallback : String(value);
+    function svg(tag, attrs = {}) {
+      const node = document.createElementNS(SVGNS, tag);
+      for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+      return node;
     }
-
-    function formatNumber(number) {
-      return typeof number === 'number' ? String(number) : '—';
-    }
-
     function safeGithubUrl(url) {
-      try {
-        const parsed = new URL(url);
-        return parsed.protocol === 'https:' && parsed.hostname === 'github.com' ? parsed.href : null;
-      } catch {
-        return null;
+      try { const u = new URL(url); return u.protocol === 'https:' && u.hostname === 'github.com' ? u.href : null; } catch { return null; }
+    }
+    const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+    const VERDICTS = {
+      review_first: { title: 'Review first', label: 'On target', tone: '--good' },
+      likely_off_target: { title: 'Likely off target', label: 'Off target', tone: '--bad' },
+      needs_context: { title: 'Needs more context', label: 'Unclear', tone: '--warn' }
+    };
+
+    const toneFor = (v) => (typeof v !== 'number' ? '--faint' : v >= 0.6 ? '--good' : v >= 0.3 ? '--warn' : '--bad');
+    const pct = (v) => (typeof v === 'number' ? `${Math.round(v * 100)}%` : '—');
+    function findIssue(n) { return state.board?.issues.find((i) => i.number === n) ?? null; }
+    function rowFor(n) {
+      for (const i of state.board?.issues ?? []) { const r = i.prs.find((p) => p.number === n); if (r) return { issue: i, row: r }; }
+      const r = state.board?.unlinked.find((p) => p.number === n);
+      return r ? { issue: null, row: r } : null;
+    }
+
+    // ---------- Card ----------
+    function refChips(ids, evidenceById) {
+      const wrap = el('span', 'refs');
+      (ids ?? []).slice(0, 4).forEach((id) => {
+        const record = evidenceById.get(id);
+        const url = safeGithubUrl(record?.url);
+        const chip = url ? el('a', '', id) : el('span', '', id);
+        if (url) { chip.href = url; chip.target = '_blank'; chip.rel = 'noreferrer'; chip.title = record?.text ?? id; }
+        wrap.append(chip);
+      });
+      return wrap;
+    }
+
+    function ring(value, label) {
+      const box = el('div');
+      const r = el('div', 'ring');
+      const size = 84, stroke = 8, rad = (size - stroke) / 2, circ = 2 * Math.PI * rad;
+      const s = svg('svg', { width: size, height: size, viewBox: `0 0 ${size} ${size}` });
+      s.append(svg('circle', { cx: size / 2, cy: size / 2, r: rad, fill: 'none', stroke: cssVar('--line'), 'stroke-width': stroke }));
+      if (typeof value === 'number') {
+        const tone = value >= 0.6 ? '--good' : value >= 0.3 ? '--warn' : '--bad';
+        s.append(svg('circle', { cx: size / 2, cy: size / 2, r: rad, fill: 'none', stroke: cssVar(tone), 'stroke-width': stroke, 'stroke-linecap': 'round', 'stroke-dasharray': `${Math.max(0.001, value) * circ} ${circ}` }));
       }
+      r.append(s, el('span', '', typeof value === 'number' ? `${Math.round(value * 100)}%` : '—'));
+      box.append(r, el('small', '', label));
+      return box;
     }
 
-    function section(title, eyebrow) {
-      const wrapper = element('section', 'rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6');
-      if (eyebrow) wrapper.append(element('p', 'text-xs font-bold uppercase tracking-[0.2em] text-sky-400', eyebrow));
-      wrapper.append(element('h3', 'mt-1 text-lg font-black text-white', title));
-      return wrapper;
-    }
-
-    function empty(text) {
-      return element('p', 'mt-3 text-sm text-slate-400', text);
-    }
-
-    function pill(text, classes = 'bg-slate-800 text-slate-300') {
-      return element('span', `inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${classes}`, text);
-    }
-
-    function evidenceChip(id, evidenceById) {
-      const record = evidenceById.get(id);
-      const url = safeGithubUrl(record?.url);
-      if (!url) return pill(id, 'bg-slate-800 text-slate-400');
-      const link = element('a', 'inline-flex rounded-full bg-sky-500/15 px-2.5 py-1 text-xs font-black text-sky-300 transition hover:bg-sky-500/25', id);
-      link.href = url;
-      link.target = '_blank';
-      link.rel = 'noreferrer';
-      link.title = record.text ?? id;
-      return link;
-    }
-
-    function renderProvenance(card) {
-      const provenance = card.provenance ?? {};
-      const mode = String(provenance.mode ?? 'live').toUpperCase();
-      const loud = mode === 'REPLAY';
-      const wrapper = element('div', `sticky top-2 z-10 flex flex-col gap-2 rounded-2xl border p-3 shadow-xl backdrop-blur sm:flex-row sm:items-center sm:justify-between ${loud ? 'border-amber-400 bg-amber-950/95' : 'border-slate-700 bg-slate-900/95'}`);
-      const left = element('div', 'flex flex-wrap items-center gap-2');
-      left.append(pill(mode, loud ? 'bg-amber-400 text-amber-950' : mode === 'CACHED' ? 'bg-violet-400 text-violet-950' : 'bg-emerald-400 text-emerald-950'));
-      if (provenance.assessmentSource) {
-        const fromModel = provenance.assessmentSource === 'model';
-        left.append(pill(fromModel ? 'Gemma 4' : 'Evidence only (model output rejected)', fromModel ? 'bg-sky-500/15 text-sky-300' : 'bg-amber-500/15 text-amber-300'));
+    function renderVerdict(card) {
+      const v = VERDICTS[card.finalPriority] ?? VERDICTS.needs_context;
+      const box = el('section', 'panel verdict');
+      box.style.setProperty('--tone', cssVar(v.tone));
+      const left = el('div');
+      left.append(el('span', 'label', v.label));
+      left.append(el('h3', '', v.title));
+      left.append(el('p', '', card.priorityReason || card.assessment?.reality_summary || ''));
+      const fromModel = card.provenance?.assessmentSource === 'model';
+      const note = el('p', 'note');
+      note.append(el('i', `dot ${fromModel ? 'on' : 'off'}`));
+      note.append(document.createTextNode(fromModel
+        ? `Summary written by AI (${card.provenance?.model ?? 'Gemma'}) from measured evidence`
+        : 'AI summary unavailable. Showing measured evidence only.'));
+      left.append(note);
+      box.append(left);
+      if (card.mode === 'graph') {
+        const score = el('div', 'score');
+        score.append(ring(card.fit?.score ?? null, 'Fit score'));
+        score.append(ring(card.metrics?.relevance ?? null, 'Relevance'));
+        box.append(score);
       }
-      left.append(element('span', 'text-xs text-slate-300', `Model: ${value(provenance.model)}`));
-      if (provenance.promptVersion) left.append(element('span', 'text-[11px] text-slate-500', `Prompt: ${provenance.promptVersion}`));
-      const commit = provenance.graphCommit ? String(provenance.graphCommit).slice(0, 8) : 'none';
-      left.append(element('span', 'text-xs text-slate-300', `Graph: ${commit}`));
-      wrapper.append(left);
-      wrapper.append(element('time', 'text-xs text-slate-400', `Generated: ${value(provenance.generatedAt)}`));
-      return wrapper;
-    }
-
-    function renderPriority(card) {
-      const priority = card.finalPriority ?? 'needs_context';
-      const palette = priority === 'review_first'
-        ? 'border-emerald-500/50 bg-emerald-950/50 text-emerald-100'
-        : priority === 'likely_off_target'
-          ? 'border-rose-500/50 bg-rose-950/50 text-rose-100'
-          : 'border-amber-500/50 bg-amber-950/50 text-amber-100';
-      const wrapper = element('section', `rounded-2xl border p-5 ${palette}`);
-      wrapper.append(element('p', 'text-xs font-black uppercase tracking-[0.2em]', 'Review priority'));
-      wrapper.append(element('h2', 'mt-1 text-2xl font-black', priority.replaceAll('_', ' ')));
-      wrapper.append(element('p', 'mt-2 text-sm opacity-90', value(card.priorityReason)));
-      const suggested = card.assessment?.suggested_priority;
-      if (card.rulePriority && suggested && card.rulePriority !== suggested) {
-        const disagreement = element('div', 'mt-3 flex flex-wrap gap-2');
-        disagreement.append(pill(`Rule: ${card.rulePriority}`, 'bg-black/20 text-current'));
-        disagreement.append(pill(`Assessment: ${suggested}`, 'bg-black/20 text-current'));
-        wrapper.append(disagreement);
-      }
-      return wrapper;
+      return box;
     }
 
     function renderClaim(card) {
-      const wrapper = section(`PR #${value(card.pr?.number)} · ${value(card.pr?.title)}`, 'Claim vs reality');
-      wrapper.append(element('p', 'mt-2 text-xs text-slate-400', `By ${value(card.pr?.author)} · head ${value(card.pr?.headSha).slice(0, 8)} · linked issue ${card.pr?.linkedIssue ? `#${card.pr.linkedIssue}` : 'none'}`));
-      const grid = element('div', 'mt-5 grid gap-4 md:grid-cols-2');
-      const claim = element('div', 'rounded-xl border border-slate-800 bg-slate-950/60 p-4');
-      claim.append(element('h4', 'text-xs font-black uppercase tracking-wider text-slate-400', 'Claim'));
-      claim.append(element('p', 'mt-2 text-sm leading-6 text-slate-200', value(card.assessment?.claim_summary)));
-      const reality = element('div', 'rounded-xl border border-slate-800 bg-slate-950/60 p-4');
-      reality.append(element('h4', 'text-xs font-black uppercase tracking-wider text-sky-400', card.mode === 'diffonly' ? 'Reality (diff-only, no graph)' : 'Graph-grounded reality'));
-      reality.append(element('p', 'mt-2 text-sm leading-6 text-slate-200', value(card.assessment?.reality_summary)));
-      grid.append(claim, reality);
-      wrapper.append(grid);
-      return wrapper;
+      const two = el('div', 'two');
+      const a = el('section', 'panel box');
+      a.append(el('h4', '', 'What the PR says'), el('p', '', card.assessment?.claim_summary || `“${card.pr?.title ?? ''}”`));
+      const b = el('section', 'panel box');
+      b.append(el('h4', '', card.mode === 'diffonly' ? 'What the diff shows' : 'What it actually changes'), el('p', '', card.assessment?.reality_summary || '—'));
+      two.append(a, b);
+      return two;
     }
 
     function renderFindings(card, evidenceById) {
-      const wrapper = section('Findings', 'Cited assessment');
-      const findings = card.assessment?.findings ?? [];
-      if (!findings.length) { wrapper.append(empty('No findings were returned.')); return wrapper; }
-      const list = element('div', 'mt-4 space-y-3');
-      const colors = {
-        info: 'border-sky-500/40 bg-sky-950/30',
-        warn: 'border-amber-500/40 bg-amber-950/30',
-        risk: 'border-rose-500/40 bg-rose-950/30'
-      };
-      findings.forEach((finding) => {
-        const item = element('div', `rounded-xl border p-4 ${colors[finding.severity] ?? colors.info}`);
-        const top = element('div', 'flex items-start gap-3');
-        top.append(pill(value(finding.severity, 'info').toUpperCase(), finding.severity === 'risk' ? 'bg-rose-400 text-rose-950' : finding.severity === 'warn' ? 'bg-amber-400 text-amber-950' : 'bg-sky-400 text-sky-950'));
-        top.append(element('p', 'text-sm leading-6 text-slate-100', value(finding.text)));
-        item.append(top);
-        const chips = element('div', 'mt-3 flex flex-wrap gap-2');
-        (finding.evidence ?? []).forEach((id) => chips.append(evidenceChip(id, evidenceById)));
-        item.append(chips);
-        list.append(item);
+      const box = el('section', 'panel box');
+      box.append(el('h4', '', 'Key points'));
+      const order = { risk: 0, warn: 1, info: 2 };
+      const findings = [...(card.assessment?.findings ?? [])].sort((x, y) => (order[x.severity] ?? 3) - (order[y.severity] ?? 3)).slice(0, 4);
+      if (!findings.length) { box.append(el('p', 'empty', 'Nothing notable.')); return box; }
+      const list = el('ul', 'findings');
+      findings.forEach((f) => {
+        const li = el('li');
+        li.append(el('i', `sev ${f.severity ?? 'info'}`));
+        const text = el('span', '', f.text);
+        text.append(refChips(f.evidence, evidenceById));
+        li.append(text);
+        list.append(li);
       });
-      wrapper.append(list);
-      return wrapper;
+      box.append(list);
+      return box;
     }
 
-    function metricTile(label, raw, detail) {
-      const node = element('div', 'rounded-xl border border-slate-800 bg-slate-950/60 p-4');
-      node.append(element('p', 'text-xs font-bold uppercase tracking-wider text-slate-500', label));
-      node.append(element('p', 'mt-1 text-xl font-black text-white', raw));
-      if (detail) node.append(element('p', 'mt-1 text-xs text-slate-400', detail));
-      return node;
+    function renderNext(card) {
+      const two = el('div', 'two');
+      const q = el('section', 'panel box');
+      q.append(el('h4', '', 'Ask the contributor'));
+      const questions = (card.assessment?.questions_for_contributor ?? []).slice(0, 3);
+      if (questions.length) { const ul = el('ul', 'simple'); questions.forEach((x) => ul.append(el('li', '', x))); q.append(ul); }
+      else q.append(el('p', 'empty', 'No open questions.'));
+      const t = el('section', 'panel box');
+      t.append(el('h4', '', 'Tests to run'));
+      const tests = [...new Set([...(card.testsToRun ?? []), ...(card.assessment?.tests ?? []).map((x) => x.name)])].slice(0, 6);
+      if (tests.length) { const tags = el('div', 'tags'); tests.forEach((x) => tags.append(el('code', 'tag', x))); t.append(tags); }
+      else t.append(el('p', 'empty', 'No affected tests found.'));
+      two.append(q, t);
+      return two;
     }
 
-    function renderMetrics(card) {
-      const wrapper = section('Raw metrics', 'Measured, not invented');
-      const metrics = card.metrics;
-      if (!metrics) { wrapper.append(empty('Metrics are unavailable in diff-only mode or when graph evidence is insufficient.')); return wrapper; }
-      const grid = element('div', 'mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4');
-      if (metrics.nullReason) {
-        wrapper.append(element('p', 'mt-3 rounded-xl bg-amber-500/15 p-3 text-sm font-bold text-amber-300', `Relevance not computed (${String(metrics.nullReason).replaceAll('_', ' ')}). The tool abstains instead of guessing.`));
-      }
-      grid.append(metricTile('Issue area hit', metrics.issueAreaHit === null || metrics.issueAreaHit === undefined ? '—' : String(metrics.issueAreaHit)));
-      grid.append(metricTile('Relevance', formatNumber(metrics.relevance), 'Relevance ≠ correctness'));
-      grid.append(metricTile('Community overlap', formatNumber(metrics.communityOverlap)));
-      grid.append(metricTile('Blast radius', formatNumber(metrics.blastRadius), 'Nodes that may be affected'));
-      wrapper.append(grid);
-      const details = element('div', 'mt-4 flex flex-wrap gap-2');
-      (metrics.godNodesTouched ?? []).forEach((node) => details.append(pill(`God node: ${node}`, 'bg-fuchsia-500/15 text-fuchsia-300')));
-      Object.entries(metrics.edgeConfidence ?? {}).forEach(([kind, count]) => details.append(pill(`${kind}: ${count}`, kind === 'INFERRED' ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300')));
-      if (!details.childNodes.length) details.append(element('span', 'text-sm text-slate-400', 'No god nodes or edge-confidence counts returned.'));
-      wrapper.append(details);
-      if ((metrics.issueAreaNodes ?? []).length) {
-        wrapper.append(element('h4', 'mt-5 text-xs font-black uppercase tracking-wider text-slate-400', 'Issue area nodes'));
-        const nodes = element('div', 'mt-2 flex flex-wrap gap-2');
-        metrics.issueAreaNodes.forEach((node) => nodes.append(pill(node, 'bg-sky-500/15 text-sky-300')));
-        wrapper.append(nodes);
-      }
-      const unexplained = metrics.unexplained ?? [];
-      if (unexplained.length) {
-        wrapper.append(element('h4', 'mt-5 text-xs font-black uppercase tracking-wider text-slate-400', 'Changes outside the issue area'));
-        const list = element('div', 'mt-2 flex flex-wrap gap-2');
-        unexplained.forEach((item) => {
-          const text = `${value(item.label)}${item.file ? ` · ${item.file}${item.line ? `:${item.line}` : ''}` : ''}`;
-          const url = safeGithubUrl(item.url);
-          if (!url) { list.append(pill(text)); return; }
-          const link = element('a', 'inline-flex rounded-full bg-rose-500/15 px-2.5 py-1 text-xs font-bold text-rose-300 hover:bg-rose-500/25', text);
-          link.href = url; link.target = '_blank'; link.rel = 'noreferrer';
-          list.append(link);
-        });
-        wrapper.append(list);
-      }
-      return wrapper;
-    }
-
-    function renderCoverage(card) {
-      const wrapper = section('Coverage', 'Graph mapping quality');
-      const coverage = card.coverage;
-      if (!coverage) { wrapper.append(empty('Coverage is not available in diff-only mode.')); return wrapper; }
-      const grid = element('div', 'mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4');
-      grid.append(metricTile('Precision', value(coverage.precision)));
-      grid.append(metricTile('Mapped lines', formatNumber(coverage.mappedLines)));
-      grid.append(metricTile('Changed lines', formatNumber(coverage.changedLines)));
-      grid.append(metricTile('Graph stale', String(Boolean(coverage.graphStale))));
-      wrapper.append(grid);
-      if (coverage.graphStale) wrapper.append(element('p', 'mt-4 rounded-xl bg-amber-500/15 p-3 text-sm font-bold text-amber-300', 'Stale-graph warning: the graph commit does not match the pull request base.'));
-      const additions = element('div', 'mt-4 flex flex-wrap gap-2');
-      additions.append(element('span', 'text-sm font-bold text-slate-300', 'Unmapped additions:'));
-      if ((coverage.unmappedAdditions ?? []).length) coverage.unmappedAdditions.forEach((item) => additions.append(pill(item)));
-      else additions.append(element('span', 'text-sm text-slate-500', 'None'));
-      wrapper.append(additions);
-      const changedTests = coverage.testsChanged ?? [];
-      if (changedTests.length) {
-        wrapper.append(element('h4', 'mt-5 text-xs font-black uppercase tracking-wider text-slate-400', 'Tests changed in this PR'));
-        const tests = element('div', 'mt-2 flex flex-wrap gap-2');
-        changedTests.forEach((name) => tests.append(pill(name, 'bg-emerald-500/15 text-emerald-300')));
-        wrapper.append(tests);
-      }
-      return wrapper;
-    }
-
-    function renderTests(card, evidenceById) {
-      const wrapper = section('Tests to run', 'Impact-guided checks');
-      const entries = [];
-      (card.testsToRun ?? []).forEach((name) => entries.push({ name, kind: 'graph', reason: 'Selected from graph impact.', evidence: [] }));
-      (card.assessment?.tests ?? []).forEach((test) => entries.push(test));
-      if (!entries.length) { wrapper.append(empty('No tests were returned for this mode.')); return wrapper; }
-      const list = element('div', 'mt-4 space-y-3');
-      entries.forEach((test) => {
-        const row = element('div', 'rounded-xl border border-slate-800 bg-slate-950/60 p-4');
-        const head = element('div', 'flex flex-wrap items-center gap-2');
-        head.append(pill(value(test.kind, 'graph').toUpperCase()));
-        head.append(element('p', 'font-bold text-white', value(test.name)));
-        row.append(head);
-        row.append(element('p', 'mt-2 text-sm text-slate-400', value(test.reason)));
-        const chips = element('div', 'mt-2 flex flex-wrap gap-2');
-        (test.evidence ?? []).forEach((id) => chips.append(evidenceChip(id, evidenceById)));
-        row.append(chips);
+    function renderFit(card) {
+      const box = el('section', 'panel box');
+      const ctx = rowFor(card.pr?.number);
+      const head = el('div', 'toolbar');
+      head.append(el('h4', '', 'Why this fit score'));
+      if (ctx?.issue && ctx.issue.prs.length > 1) head.append(el('span', 'meta', `Ranked #${ctx.row.rank} of ${ctx.issue.prs.length} PRs for issue #${ctx.issue.number}`));
+      box.append(head);
+      const fit = card.fit;
+      if (!fit) { box.append(el('p', 'empty', 'No score: the issue gives no code to compare against.')); return box; }
+      const list = el('div', 'fit-parts');
+      fit.parts.forEach((part) => {
+        const row = el('div', 'fit-part');
+        row.style.setProperty('--tone', cssVar(toneFor(part.value)));
+        const bar = el('div', 'bar'); const fill = el('i'); fill.style.width = `${Math.round(part.value * 100)}%`; bar.append(fill);
+        const shown = ['tests', 'focus'].includes(part.key) ? (part.value ? 'yes' : 'no') : pct(part.value);
+        row.append(el('span', '', `${part.label} · ${shown}`), bar, el('span', 'w', `+${Math.round(part.points * 100)} / ${Math.round(part.weight * 100)}`));
         list.append(row);
       });
-      wrapper.append(list);
-      return wrapper;
+      box.append(list);
+      box.append(el('p', 'note', fit.capped
+        ? 'Capped at 20%: the PR changes none of the code the issue is about.'
+        : 'Weighted sum of measured facts from the code graph. Weights are fixed; nothing here comes from the AI.'));
+      return box;
     }
 
-    function renderOverlaps(card) {
-      const wrapper = section('Other open work', 'Overlap signals');
-      const overlaps = card.overlaps ?? [];
-      if (!overlaps.length) { wrapper.append(empty('No overlap signals were returned.')); return wrapper; }
-      const list = element('div', 'mt-4 flex flex-wrap gap-3');
-      overlaps.forEach((overlap) => {
-        const duplicate = overlap.kind === 'possible_duplicate';
-        const item = element('div', 'rounded-xl border border-slate-800 bg-slate-950/60 p-4');
-        const overlapLabel = `${duplicate ? `Possible duplicate of #${overlap.pr}` : `Coordinate with #${overlap.pr}`}${overlap.sameIssue ? ' · same issue' : ''}`;
-        item.append(pill(overlapLabel, duplicate ? 'bg-rose-500/15 text-rose-300' : 'bg-violet-500/15 text-violet-300'));
-        item.append(element('p', 'mt-2 text-xs text-slate-400', `Jaccard: ${formatNumber(overlap.jaccard)} · Shared: ${(overlap.shared ?? []).join(', ') || 'not listed'}`));
-        list.append(item);
-      });
-      wrapper.append(list);
-      return wrapper;
+    function stat(value, label) {
+      const s = el('div', 'stat');
+      s.append(el('b', '', value), el('span', '', label));
+      return s;
     }
 
-    function renderStringList(title, eyebrow, items, fallback) {
-      const wrapper = section(title, eyebrow);
-      if (!items?.length) { wrapper.append(empty(fallback)); return wrapper; }
-      const list = element('ul', 'mt-4 space-y-2');
-      items.forEach((item) => {
-        const row = element('li', 'flex gap-3 rounded-xl bg-slate-950/50 p-3 text-sm leading-6 text-slate-300');
-        row.append(element('span', 'font-black text-sky-400', '→'));
-        row.append(element('span', '', item));
-        list.append(row);
-      });
-      wrapper.append(list);
-      return wrapper;
-    }
-
-    function renderEvidence(card) {
-      const wrapper = section('Full evidence list', 'Traceable records');
-      const evidence = card.evidence ?? [];
-      if (!evidence.length) { wrapper.append(empty('No numbered evidence is available in this mode.')); return wrapper; }
-      const list = element('div', 'mt-4 space-y-3');
-      evidence.forEach((record) => {
-        const row = element('div', 'rounded-xl border border-slate-800 bg-slate-950/60 p-4');
-        const head = element('div', 'flex flex-wrap items-center gap-2');
-        head.append(pill(value(record.id), 'bg-sky-500/15 text-sky-300'));
-        head.append(pill(value(record.kind).replaceAll('_', ' ')));
-        if (record.file) head.append(element('span', 'text-xs text-slate-500', `${record.file}${record.lines ? ` · ${record.lines}` : ''}`));
-        row.append(head);
-        row.append(element('p', 'mt-3 text-sm leading-6 text-slate-300', value(record.text)));
-        const url = safeGithubUrl(record.url);
-        if (url) {
-          const link = element('a', 'mt-3 inline-flex text-xs font-bold text-sky-300 hover:text-sky-200', 'Open evidence on GitHub ↗');
-          link.href = url;
-          link.target = '_blank';
-          link.rel = 'noreferrer';
-          row.append(link);
+    function renderDetails(card) {
+      const d = el('details', 'panel more');
+      d.append(el('summary', '', 'Technical details'));
+      const body = el('div', 'more-body');
+      const m = card.metrics, c = card.coverage;
+      if (m || c) {
+        const stats = el('div', 'stats');
+        if (m) {
+          stats.append(stat(m.issueAreaHit === null || m.issueAreaHit === undefined ? '—' : m.issueAreaHit ? 'Yes' : 'No', 'Touches issue code'));
+          stats.append(stat(m.blastRadius ?? '—', 'Code that may be affected'));
+          stats.append(stat((m.unexplained ?? []).length, 'Changes outside issue area'));
         }
-        list.append(row);
-      });
-      wrapper.append(list);
-      return wrapper;
+        if (c) {
+          stats.append(stat(`${c.mappedLines ?? 0}/${c.changedLines ?? 0}`, 'Changed lines mapped'));
+          stats.append(stat(c.graphStale ? 'Yes' : 'No', 'Graph out of date'));
+        }
+        body.append(stats);
+      }
+      const overlaps = card.overlaps ?? [];
+      if (overlaps.length) {
+        const sec = el('div');
+        sec.append(el('p', 'sub', 'Related open pull requests'));
+        const tags = el('div', 'tags');
+        overlaps.forEach((o) => tags.append(el('span', 'tag', `#${o.pr} · ${o.kind === 'possible_duplicate' ? 'possible duplicate' : 'touches the same code'}`)));
+        sec.append(tags);
+        body.append(sec);
+      }
+      const limits = card.assessment?.limitations ?? [];
+      if (limits.length) {
+        const sec = el('div');
+        sec.append(el('p', 'sub', 'Limitations'));
+        const ul = el('ul', 'simple');
+        limits.forEach((x) => ul.append(el('li', '', x)));
+        sec.append(ul);
+        body.append(sec);
+      }
+      const evidence = card.evidence ?? [];
+      if (evidence.length) {
+        const sec = el('div');
+        sec.append(el('p', 'sub', 'Evidence'));
+        const list = el('div', 'ev');
+        evidence.forEach((r) => {
+          const row = el('div');
+          row.append(el('span', 'id mono', r.id));
+          const url = safeGithubUrl(r.url);
+          const text = url ? el('a', '', r.text) : el('span', '', r.text);
+          if (url) { text.href = url; text.target = '_blank'; text.rel = 'noreferrer'; }
+          row.append(text);
+          list.append(row);
+        });
+        sec.append(list);
+        body.append(sec);
+      }
+      const p = card.provenance ?? {};
+      body.append(el('p', 'note', `${p.mode === 'cached' ? 'Saved result' : p.mode === 'replay' ? 'Recorded result' : 'Fresh result'} · model ${p.model ?? '—'} · graph ${String(p.graphCommit ?? '—').slice(0, 7)} · ${p.generatedAt ? new Date(p.generatedAt).toLocaleString() : ''}`));
+      d.append(body);
+      return d;
+    }
+
+    function renderGraphPanel(card) {
+      const box = el('section', 'panel');
+      const head = el('div', 'graph-head');
+      head.append(el('h4', 'sub', 'Where the change lands'));
+      const right = el('div', 'legend');
+      [['--good', 'Changed, in issue area'], ['--bad', 'Changed, outside issue area'], ['--accent', 'Issue area'], ['--warn', 'May be affected']]
+        .forEach(([v, t]) => { const s = el('span'); const i = el('i'); i.style.background = cssVar(v); s.append(i, document.createTextNode(t)); right.append(s); });
+      head.append(right);
+      const wrap = el('div', 'graph-wrap');
+      wrap.append(el('div', 'msg', 'Loading graph…'));
+      const info = el('div', 'graph-info', 'Drag to move, scroll to zoom, click a dot for details.');
+      const expand = el('button', 'icon-btn', 'Expand');
+      expand.type = 'button';
+      expand.style.margin = '0 20px 16px';
+      expand.addEventListener('click', () => openOverlay(card.pr.number));
+      box.append(head, wrap, info, expand);
+      loadGraph(card.pr.number).then((g) => drawGraph(wrap, info, g)).catch(() => { wrap.replaceChildren(el('div', 'msg', 'The code graph could not be loaded.')); });
+      return box;
     }
 
     function renderCard(card) {
-      cardRoot.replaceChildren();
-      const evidenceById = new Map((card.evidence ?? []).map((record) => [record.id, record]));
-      cardRoot.append(renderProvenance(card));
-      cardRoot.append(renderPriority(card));
-      cardRoot.append(renderClaim(card));
-      cardRoot.append(renderFindings(card, evidenceById));
-      cardRoot.append(renderMetrics(card));
-      cardRoot.append(renderCoverage(card));
-      cardRoot.append(renderTests(card, evidenceById));
-      cardRoot.append(renderOverlaps(card));
-      cardRoot.append(renderStringList('Questions for the contributor', 'Useful next conversation', card.assessment?.questions_for_contributor, 'No contributor questions were returned.'));
-      cardRoot.append(renderStringList('Limitations', 'Where evidence is thin', card.assessment?.limitations, 'No limitations were returned.'));
-      cardRoot.append(renderEvidence(card));
-      statusRoot.classList.add('hidden');
-      cardRoot.classList.remove('hidden');
-    }
+      state.card = card;
+      const root = $('card');
+      root.replaceChildren();
+      const evidenceById = new Map((card.evidence ?? []).map((r) => [r.id, r]));
 
-    function setStatus(message, kind = 'normal') {
-      cardRoot.classList.add('hidden');
-      statusRoot.classList.remove('hidden');
-      statusRoot.textContent = message;
-      statusRoot.className = `mt-5 rounded-2xl border p-8 text-center ${kind === 'error' ? 'border-rose-500/40 bg-rose-950/30 text-rose-200' : 'border-slate-800 bg-slate-900/60 text-slate-300'}`;
-    }
-
-    function updateUrl() {
-      const params = new URLSearchParams();
-      if (state.selected) params.set('pr', state.selected);
-      params.set('mode', state.mode);
-      if (state.replay) params.set('replay', '1');
-      history.replaceState(null, '', `${location.pathname}?${params}`);
-    }
-
-    function updateControls() {
-      ['graph', 'diffonly'].forEach((mode) => {
-        const button = byId(`mode-${mode}`);
-        const active = state.mode === mode;
-        button.className = `rounded-xl px-4 py-3 text-left text-sm font-bold transition ${active ? 'bg-sky-400 text-sky-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`;
-        button.setAttribute('aria-pressed', String(active));
+      const bar = el('div', 'toolbar');
+      const title = el('div');
+      if (card.pr?.linkedIssue && findIssue(card.pr.linkedIssue)) {
+        const back = el('button', 'back', `← Issue #${card.pr.linkedIssue}: all PRs ranked`);
+        back.type = 'button';
+        back.addEventListener('click', () => openIssue(card.pr.linkedIssue));
+        title.append(back);
+      }
+      title.append(el('h2', '', `#${card.pr?.number} ${card.pr?.title ?? ''}`));
+      title.append(el('div', 'meta', `by @${card.pr?.author ?? 'unknown'}${card.pr?.linkedIssue ? ` · fixes issue #${card.pr.linkedIssue}` : ' · no linked issue'}`));
+      const controls = el('div', 'status');
+      const seg = el('div', 'seg');
+      [['graph', 'With code graph'], ['diffonly', 'Diff only']].forEach(([mode, label]) => {
+        const b = el('button', '', label);
+        b.type = 'button';
+        b.setAttribute('aria-pressed', String(state.mode === mode));
+        b.addEventListener('click', () => { if (state.mode !== mode) { state.mode = mode; loadCard(); } });
+        seg.append(b);
       });
-      byId('replay').checked = state.replay;
+      const refresh = el('button', 'icon-btn', 'Re-run');
+      refresh.type = 'button';
+      refresh.addEventListener('click', () => loadCard(true));
+      controls.append(seg, refresh);
+      bar.append(title, controls);
+
+      root.append(bar, renderVerdict(card), renderClaim(card));
+      if (card.mode === 'graph') root.append(renderFit(card));
+      if (card.mode === 'graph') root.append(renderGraphPanel(card));
+      root.append(renderFindings(card, evidenceById), renderNext(card), renderDetails(card));
+      $('state').classList.add('hidden');
+      $('issue-view').classList.add('hidden');
+      root.classList.remove('hidden');
     }
+
+    function setState(message, kind) {
+      $('card').classList.add('hidden');
+      $('issue-view').classList.add('hidden');
+      const s = $('state');
+      s.classList.remove('hidden');
+      s.className = `panel state${kind === 'error' ? ' error' : ''}`;
+      s.replaceChildren();
+      if (kind === 'loading') s.append(el('div', 'spinner'));
+      s.append(el('div', '', message));
+    }
+
+    // ---------- Graph ----------
+    async function loadGraph(pr) {
+      if (state.graphs.has(pr)) return state.graphs.get(pr);
+      const res = await fetch(`/api/graph?pr=${encodeURIComponent(pr)}`);
+      if (!res.ok) throw new Error('graph');
+      const g = await res.json();
+      state.graphs.set(pr, g);
+      return g;
+    }
+
+    const ROLE = {
+      changed_in_issue: { color: '--good', text: 'changed, inside the issue area', r: 9 },
+      changed_outside: { color: '--bad', text: 'changed, outside the issue area', r: 9 },
+      changed: { color: '--bad', text: 'changed', r: 9 },
+      issue: { color: '--accent', text: 'part of the issue area', r: 7 },
+      impacted: { color: '--warn', text: 'may be affected by the change', r: 6 },
+      other: { color: '--node', text: 'not involved', r: 4.5 }
+    };
+
+    function layout(g) {
+      const nodes = g.nodes.map((n, i) => {
+        const a = (i / Math.max(1, g.nodes.length)) * Math.PI * 2;
+        return { ...n, x: Math.cos(a) * 200 + (i % 7), y: Math.sin(a) * 200 + (i % 5), vx: 0, vy: 0 };
+      });
+      const byId = new Map(nodes.map((n) => [n.id, n]));
+      const edges = g.edges.map((e) => ({ ...e, s: byId.get(e.source), t: byId.get(e.target) })).filter((e) => e.s && e.t);
+      const n = nodes.length;
+      const k = Math.sqrt((600 * 600) / Math.max(1, n));
+      for (let iter = 0; iter < 350; iter++) {
+        const temp = 40 * (1 - iter / 350) + 1;
+        for (const a of nodes) { a.dx = 0; a.dy = 0; }
+        for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+          const a = nodes[i], b = nodes[j];
+          let dx = a.x - b.x, dy = a.y - b.y; let d = Math.hypot(dx, dy) || 0.01;
+          const f = (k * k) / d;
+          dx /= d; dy /= d;
+          a.dx += dx * f; a.dy += dy * f; b.dx -= dx * f; b.dy -= dy * f;
+        }
+        for (const e of edges) {
+          let dx = e.s.x - e.t.x, dy = e.s.y - e.t.y; const d = Math.hypot(dx, dy) || 0.01;
+          const f = (d * d) / k * (e.relation === 'contains' ? 0.6 : 1);
+          dx /= d; dy /= d;
+          e.s.dx -= dx * f; e.s.dy -= dy * f; e.t.dx += dx * f; e.t.dy += dy * f;
+        }
+        for (const a of nodes) {
+          a.dx -= a.x * 0.02 * k; a.dy -= a.y * 0.02 * k;
+          const d = Math.hypot(a.dx, a.dy) || 0.01;
+          a.x += (a.dx / d) * Math.min(d, temp); a.y += (a.dy / d) * Math.min(d, temp);
+        }
+      }
+      return { nodes, edges };
+    }
+
+    function drawGraph(wrap, info, g) {
+      wrap.replaceChildren();
+      if (!g.nodes.length) { wrap.append(el('div', 'msg', 'No code graph is loaded yet. Add graph.json to the data folder.')); return; }
+      const base = g._layout ?? (g._layout = layout(g));
+      // Fit the layout to the box in pixels so dots and labels stay a readable size.
+      const W = Math.max(320, wrap.clientWidth), H = Math.max(260, wrap.clientHeight);
+      const xs = base.nodes.map((n) => n.x), ys = base.nodes.map((n) => n.y);
+      const minX = Math.min(...xs), minY = Math.min(...ys);
+      const rx = (Math.max(...xs) - minX) || 1, ry = (Math.max(...ys) - minY) || 1;
+      const padX = 90, padY = 30;
+      const nodes = base.nodes.map((n) => ({ ...n, x: padX + ((n.x - minX) / rx) * (W - padX * 2), y: padY + ((n.y - minY) / ry) * (H - padY * 2) }));
+      const byId = new Map(nodes.map((n) => [n.id, n]));
+      const edges = base.edges.map((e) => ({ ...e, s: byId.get(e.source), t: byId.get(e.target) }));
+      let vb = { x: 0, y: 0, w: W, h: H };
+      const root = svg('svg', { role: 'img', 'aria-label': 'Code graph' });
+      const setVb = () => root.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+      setVb();
+      const focusIds = new Set(nodes.filter((n) => n.role !== 'other').map((n) => n.id));
+      const edgeLayer = svg('g'), nodeLayer = svg('g'), labelLayer = svg('g');
+      const lineFor = new Map();
+      for (const e of edges) {
+        const hot = focusIds.has(e.source) && focusIds.has(e.target);
+        const line = svg('line', {
+          x1: e.s.x, y1: e.s.y, x2: e.t.x, y2: e.t.y,
+          stroke: hot ? cssVar('--muted') : cssVar('--edge'),
+          'stroke-width': hot ? 1.4 : 1,
+          'stroke-dasharray': e.relation === 'contains' ? '3 3' : null
+        });
+        if (e.relation !== 'contains') line.removeAttribute('stroke-dasharray');
+        edgeLayer.append(line);
+        lineFor.set(e, line);
+      }
+      const order = ['other', 'impacted', 'issue', 'changed', 'changed_outside', 'changed_in_issue'];
+      [...nodes].sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role)).forEach((n) => {
+        const role = ROLE[n.role] ?? ROLE.other;
+        const fill = cssVar(role.color);
+        const shape = n.isFile
+          ? svg('rect', { x: n.x - role.r, y: n.y - role.r, width: role.r * 2, height: role.r * 2, rx: 3, fill, stroke: cssVar('--surface-2'), 'stroke-width': 2 })
+          : svg('circle', { cx: n.x, cy: n.y, r: role.r, fill, stroke: cssVar('--surface-2'), 'stroke-width': 2 });
+        if (n.role === 'issue') { shape.setAttribute('fill', cssVar('--surface-2')); shape.setAttribute('stroke', fill); shape.setAttribute('stroke-width', 2.5); }
+        shape.style.cursor = 'pointer';
+        const t = svg('title'); t.textContent = n.label; shape.append(t);
+        shape.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          info.replaceChildren();
+          info.append(el('b', '', n.label));
+          info.append(document.createTextNode(`${n.file ? ` · ${n.file}${n.line ? `:${n.line}` : ''}` : ''} · ${role.text}`));
+          for (const [e, line] of lineFor) {
+            const on = e.source === n.id || e.target === n.id;
+            line.setAttribute('stroke', on ? cssVar('--ink') : cssVar('--edge'));
+            line.setAttribute('stroke-width', on ? 1.8 : 1);
+          }
+        });
+        nodeLayer.append(shape);
+        const showLabel = n.role !== 'other' || n.isFile || nodes.length <= 30;
+        if (showLabel) {
+          const label = svg('text', { x: n.x + role.r + 4, y: n.y + 4, class: `n-label${n.role === 'other' ? ' dim' : ''}` });
+          label.textContent = n.label.length > 28 ? `${n.label.slice(0, 27)}…` : n.label;
+          labelLayer.append(label);
+        }
+      });
+      root.append(edgeLayer, nodeLayer, labelLayer);
+
+      // Pan + zoom
+      let drag = null;
+      root.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, vb: { ...vb } }; root.setPointerCapture(e.pointerId); });
+      root.addEventListener('pointermove', (e) => {
+        if (!drag) return;
+        const scale = vb.w / root.clientWidth;
+        vb.x = drag.vb.x - (e.clientX - drag.x) * scale; vb.y = drag.vb.y - (e.clientY - drag.y) * scale; setVb();
+      });
+      root.addEventListener('pointerup', () => { drag = null; });
+      root.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const f = e.deltaY > 0 ? 1.12 : 1 / 1.12;
+        const rect = root.getBoundingClientRect();
+        const mx = vb.x + ((e.clientX - rect.left) / rect.width) * vb.w, my = vb.y + ((e.clientY - rect.top) / rect.height) * vb.h;
+        vb = { x: mx - (mx - vb.x) * f, y: my - (my - vb.y) * f, w: vb.w * f, h: vb.h * f }; setVb();
+      }, { passive: false });
+      wrap.append(root);
+      const counts = nodes.reduce((acc, n) => { acc[n.role] = (acc[n.role] ?? 0) + 1; return acc; }, {});
+      const changed = (counts.changed_in_issue ?? 0) + (counts.changed_outside ?? 0) + (counts.changed ?? 0);
+      info.textContent = changed
+        ? `${changed} changed piece${changed === 1 ? '' : 's'} of code · ${counts.changed_in_issue ?? 0} inside the issue area · ${counts.impacted ?? 0} may be affected. Click a dot for details.`
+        : `${g.total} pieces of code. Click a dot for details.`;
+    }
+
+    async function openOverlay(pr) {
+      $('overlay').classList.add('open');
+      const wrap = $('overlay-graph');
+      wrap.replaceChildren(el('div', 'msg', 'Loading graph…'));
+      try { drawGraph(wrap, $('overlay-info'), await loadGraph(pr)); } catch { wrap.replaceChildren(el('div', 'msg', 'The code graph could not be loaded.')); }
+    }
+    $('overlay-close').addEventListener('click', () => $('overlay').classList.remove('open'));
+    $('overlay').addEventListener('click', (e) => { if (e.target === $('overlay')) $('overlay').classList.remove('open'); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('overlay').classList.remove('open'); });
+
+    // ---------- Data ----------
+    function updateUrl() {
+      const p = new URLSearchParams();
+      if (state.selected) p.set('pr', state.selected);
+      else if (state.issue) p.set('issue', state.issue);
+      if (state.mode !== 'graph') p.set('mode', state.mode);
+      if (state.replay) p.set('replay', '1');
+      history.replaceState(null, '', `${location.pathname}${p.toString() ? `?${p}` : ''}`);
+    }
+
+    function prButton(row, ranked) {
+      const b = el('button', 'pr-item');
+      b.type = 'button';
+      b.setAttribute('aria-current', String(state.selected === row.number));
+      const v = VERDICTS[row.rulePriority] ?? VERDICTS.needs_context;
+      const pill = el('span', 'fitpill', pct(row.fit?.score));
+      pill.style.setProperty('--tone', cssVar(toneFor(row.fit?.score)));
+      pill.title = `Fit score · ${v.title}`;
+      const mid = el('span');
+      mid.style.display = 'grid';
+      mid.append(el('span', 'pr-num', `#${row.number} · @${row.author ?? 'unknown'}`), el('span', 'pr-title', row.title));
+      b.append(el('span', 'rank', ranked ? `${row.rank}.` : ''), mid, pill);
+      b.addEventListener('click', () => selectPR(row.number));
+      return b;
+    }
+
+    function renderBoard() {
+      const list = $('pr-list');
+      list.replaceChildren();
+      const groups = [...state.board.issues];
+      if (state.board.unlinked.length) groups.push({ number: null, title: 'Not linked to an issue', prs: state.board.unlinked });
+      if (!groups.length) { list.append(el('p', 'empty', 'No open issues or pull requests.')); return; }
+      groups.forEach((issue) => {
+        const g = el('div', 'issue-group');
+        const head = el('button', 'issue-head');
+        head.type = 'button';
+        head.setAttribute('aria-current', String(issue.number != null && state.issue === issue.number && !state.selected));
+        const num = el('span', 'pr-num');
+        num.append(el('span', '', issue.number != null ? `Issue #${issue.number}` : 'No issue'), el('span', '', `${issue.prs.length} PR${issue.prs.length === 1 ? '' : 's'}`));
+        head.append(num, el('span', 'pr-title', issue.title));
+        if (issue.number != null) head.addEventListener('click', () => openIssue(issue.number));
+        else head.disabled = true;
+        g.append(head);
+        const prs = el('div', 'issue-prs');
+        if (issue.prs.length) issue.prs.forEach((row) => prs.append(prButton(row, issue.number != null)));
+        else prs.append(el('div', 'none', 'No pull requests yet'));
+        g.append(prs);
+        list.append(g);
+      });
+    }
+
+    function renderIssueView(issue) {
+      const root = $('issue-view');
+      root.replaceChildren();
+      const bar = el('div', 'toolbar');
+      const title = el('div');
+      title.append(el('h2', '', `Issue #${issue.number} ${issue.title}`));
+      title.append(el('div', 'meta', `${issue.prs.length} open pull request${issue.prs.length === 1 ? '' : 's'} claim to fix it · ranked by fit score`));
+      bar.append(title);
+      const url = safeGithubUrl(issue.url);
+      if (url) { const a = el('a', 'icon-btn', 'Open on GitHub'); a.href = url; a.target = '_blank'; a.rel = 'noreferrer'; a.style.textDecoration = 'none'; bar.append(a); }
+      root.append(bar);
+      if (issue.excerpt) { const ex = el('section', 'panel box'); ex.append(el('h4', '', 'What the issue says'), el('p', 'excerpt', issue.excerpt)); root.append(ex); }
+
+      const box = el('section', 'panel box');
+      box.append(el('h4', '', 'Pull requests, best fit first'));
+      if (!issue.prs.length) {
+        box.append(el('p', 'empty', 'No open pull request links to this issue yet.'));
+      } else {
+        const table = el('div', 'rank-table');
+        issue.prs.forEach((row, i) => {
+          const b = el('button', `rank-row${i === 0 && (row.fit?.score ?? 0) >= 0.6 ? ' first' : ''}`);
+          b.type = 'button';
+          b.style.setProperty('--tone', cssVar(toneFor(row.fit?.score)));
+          const v = VERDICTS[row.rulePriority] ?? VERDICTS.needs_context;
+          const mid = el('div');
+          mid.append(el('div', 't', `#${row.number} ${row.title}`));
+          const meta = el('div', 'm');
+          meta.append(el('span', '', `@${row.author}`));
+          const vf = el('span', `flag ${row.rulePriority === 'review_first' ? 'good' : row.rulePriority === 'likely_off_target' ? 'bad' : 'warn'}`, v.title);
+          meta.append(vf);
+          meta.append(el('span', 'flag', `relevance ${pct(row.relevance)}`));
+          if (row.testsChanged) meta.append(el('span', 'flag good', 'adds tests'));
+          if (row.godNodesTouched) meta.append(el('span', 'flag warn', 'touches a hub function'));
+          if (row.unexplained) meta.append(el('span', 'flag warn', `${row.unexplained} change${row.unexplained === 1 ? '' : 's'} outside issue area`));
+          (row.duplicates ?? []).forEach((d) => meta.append(el('span', 'flag warn', `possible duplicate of #${d}`)));
+          if (row.error) meta.append(el('span', 'flag bad', 'could not analyse'));
+          mid.append(meta);
+          const right = el('div', 'barbox');
+          const bar2 = el('div', 'bar'); const fill = el('i'); fill.style.width = `${Math.round((row.fit?.score ?? 0) * 100)}%`; bar2.append(fill);
+          right.append(el('b', '', pct(row.fit?.score)), bar2, el('span', 'meta', 'fit score'));
+          b.append(el('div', 'rank-n', row.rank), mid, right);
+          b.addEventListener('click', () => selectPR(row.number));
+          table.append(b);
+        });
+        box.append(table);
+        box.append(el('p', 'note', 'Fit score = 60% relevance + 15% same module + 15% tests + 10% avoids hub functions, all measured from the code graph. It ranks relevance, not correctness.'));
+      }
+      root.append(box);
+      $('state').classList.add('hidden');
+      $('card').classList.add('hidden');
+      root.classList.remove('hidden');
+    }
+
+    function openIssue(n) {
+      const issue = findIssue(n);
+      if (!issue) return;
+      state.issue = n; state.selected = null;
+      updateUrl(); renderSide(); renderIssueView(issue);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    function selectPR(n) {
+      state.selected = n;
+      const ctx = rowFor(n);
+      if (ctx?.issue) state.issue = ctx.issue.number;
+      renderSide(); loadCard();
+    }
+    function renderSide() { if (state.board) renderBoard(); else renderPRs(); }
 
     function renderPRs() {
-      const list = byId('pr-list');
+      $('side-title').textContent = 'Open pull requests';
+      const list = $('pr-list');
       list.replaceChildren();
-      if (!state.prs.length) { list.append(empty('No open pull requests found.')); return; }
+      if (!state.prs.length) { list.append(el('p', 'empty', 'No open pull requests.')); return; }
       state.prs.forEach((pr) => {
-        const button = element('button', `min-w-[15rem] rounded-xl border p-3 text-left transition lg:min-w-0 ${state.selected === pr.number ? 'border-sky-400 bg-sky-500/10' : 'border-slate-800 bg-slate-950/50 hover:border-slate-600'}`);
-        button.type = 'button';
-        button.append(element('span', 'text-xs font-black text-sky-400', `#${pr.number}${pr.linkedIssue ? ` · issue #${pr.linkedIssue}` : ''}`));
-        button.append(element('span', 'mt-1 block text-sm font-bold leading-5 text-white', value(pr.title)));
-        button.append(element('span', 'mt-2 block text-xs text-slate-500', `@${value(pr.author)} · ${value(pr.headSha).slice(0, 7)}`));
-        button.addEventListener('click', () => {
-          state.selected = pr.number;
-          renderPRs();
-          loadCard();
-        });
-        list.append(button);
+        const b = el('button', 'pr-item');
+        b.type = 'button';
+        b.setAttribute('aria-current', String(state.selected === pr.number));
+        b.append(el('span', 'pr-num', `#${pr.number} · @${pr.author ?? 'unknown'}`), el('span', 'pr-title', pr.title));
+        b.addEventListener('click', () => selectPR(pr.number));
+        list.append(b);
       });
     }
 
     async function loadCard(refresh = false) {
-      if (!state.selected) { setStatus('Choose a pull request to inspect.'); return; }
-      updateControls();
+      if (!state.selected) { setState('Choose a pull request.'); return; }
       updateUrl();
-      setStatus(state.replay ? 'Loading recorded evidence…' : 'Analyzing with Gemma 4…');
-      const params = new URLSearchParams({ mode: state.mode });
-      if (state.replay) params.set('replay', '1');
-      if (refresh && !state.replay) params.set('refresh', '1');
+      setState(`Checking pull request #${state.selected}…`, 'loading');
+      const p = new URLSearchParams({ mode: state.mode });
+      if (state.replay) p.set('replay', '1');
+      if (refresh && !state.replay) { p.set('refresh', '1'); state.graphs.delete(state.selected); }
       try {
-        const response = await fetch(`/api/analyze/${state.selected}?${params}`);
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error ?? `Request failed (${response.status})`);
+        const res = await fetch(`/api/analyze/${state.selected}?${p}`);
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
         renderCard(body);
       } catch (error) {
-        setStatus(error.message, 'error');
+        setState(error.message, 'error');
       }
     }
 
     async function boot() {
-      updateControls();
       try {
-        const healthResponse = await fetch('/api/health');
-        const health = await healthResponse.json();
-        const missing = [];
-        if (health.ok && !health.graphLoaded) missing.push('no graph');
-        if (health.ok && !health.githubTokenSet) missing.push('no GitHub token');
-        if (health.ok && !health.geminiKeySet) missing.push('no Gemini key');
-        byId('health').textContent = health.ok
-          ? `${String(health.analyzer).toUpperCase()} · v${health.version}${missing.length ? ` · ${missing.join(', ')}` : ''}`
-          : 'Unavailable';
+        const health = await (await fetch('/api/health')).json();
+        if (health.repo) { $('repo-chip').hidden = false; $('repo-chip').textContent = health.repo; }
+        $('ai-dot').className = `dot ${health.geminiKeySet ? 'on' : 'off'}`;
+        $('ai-text').textContent = health.geminiKeySet ? 'AI on' : 'AI off · add GEMINI_API_KEY';
       } catch {
-        byId('health').textContent = 'Unavailable';
+        $('ai-text').textContent = 'Server unavailable';
       }
       try {
-        const prsResponse = await fetch('/api/prs');
-        const prs = await prsResponse.json();
-        if (!prsResponse.ok) throw new Error(prs.error ?? 'Could not load pull requests.');
-        if (prsResponse.headers.get('X-PR-Source') === 'replay' && !state.replay) {
-          // GitHub unreachable: only recorded cards can be shown, so switch to replay loudly.
-          state.replay = true;
+        const res = await fetch('/api/issues');
+        const board = await res.json();
+        if (res.ok && Array.isArray(board.issues)) {
+          if (board.source === 'replay') state.replay = true;
+          state.board = board;
+          state.prs = [...board.issues.flatMap((i) => i.prs), ...board.unlinked];
+          renderBoard();
+          if (state.selected) return void selectPR(state.selected);
+          const first = state.issue ? findIssue(state.issue) : board.issues.find((i) => i.prs.length > 1) ?? board.issues[0];
+          if (first) return void openIssue(first.number);
+          if (state.prs.length) return void selectPR(state.prs[0].number);
+          return void setState('No open issues or pull requests.');
         }
+      } catch { /* fall back to the plain PR list */ }
+      try {
+        const res = await fetch('/api/prs');
+        const prs = await res.json();
+        if (!res.ok) throw new Error(prs.error ?? 'Could not load pull requests.');
+        if (res.headers.get('X-PR-Source') === 'replay') state.replay = true;
         state.prs = prs;
         if (!state.selected && prs.length) state.selected = prs[0].number;
         renderPRs();
-        if (state.selected) await loadCard();
+        await loadCard();
       } catch (error) {
         renderPRs();
         if (state.selected && state.replay) await loadCard();
-        else setStatus(error.message, 'error');
+        else setState(`${error.message} Check the GitHub token and repository settings in .env.`, 'error');
       }
     }
-
-    byId('mode-graph').addEventListener('click', () => { state.mode = 'graph'; loadCard(); });
-    byId('mode-diffonly').addEventListener('click', () => { state.mode = 'diffonly'; loadCard(); });
-    byId('replay').addEventListener('change', (event) => { state.replay = event.target.checked; loadCard(); });
-    byId('refresh').addEventListener('click', () => loadCard(true));
     boot();
   </script>
 </body>

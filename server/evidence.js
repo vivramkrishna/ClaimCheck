@@ -279,3 +279,39 @@ export function buildEvidence({ input, index, diff, anchorMatch, area, metrics, 
     return rec;
   });
 }
+
+// ---------------- Fit score (ranking PRs for one issue) ----------------
+// A single 0..1 number used to rank competing PRs for the same issue. Every part is
+// a measured fact from the card; the weights are fixed and shown to the user.
+export const FIT_WEIGHTS = { relevance: 0.6, community: 0.15, tests: 0.15, focus: 0.1 };
+// A PR that changes none of the issue's code cannot rank above this, however tidy it is.
+export const FIT_OFF_TARGET_CAP = 0.2;
+
+/**
+ * @param card any object with { metrics, coverage } (a full card or computeDeterministic output)
+ * @returns { score, parts:[{key,label,value,weight,points}], capped } or null when relevance is null
+ */
+export function fitScore({ metrics, coverage } = {}) {
+  if (!metrics || metrics.relevance == null) return null;
+  const tests = (coverage?.testsChanged ?? []).length > 0;
+  const hubs = (metrics.godNodesTouched ?? []).length;
+  const raw = [
+    { key: 'relevance', label: 'Changed code inside the issue area', value: metrics.relevance },
+    { key: 'community', label: 'Same module cluster as the issue', value: metrics.communityOverlap ?? 0 },
+    { key: 'tests', label: 'Adds or updates tests', value: tests ? 1 : 0 },
+    { key: 'focus', label: hubs ? `Touches ${hubs} hub function(s)` : 'Avoids hub functions', value: hubs ? 0 : 1 },
+  ];
+  const parts = raw.map((p) => ({ ...p, weight: FIT_WEIGHTS[p.key], points: round2(p.value * FIT_WEIGHTS[p.key]) }));
+  let score = round2(parts.reduce((s, p) => s + p.value * p.weight, 0));
+  const capped = metrics.issueAreaHit === false && score > FIT_OFF_TARGET_CAP;
+  if (capped) score = FIT_OFF_TARGET_CAP;
+  return { score, parts, capped };
+}
+
+/** Sort PR summaries for one issue: best fit first, unscored last, ties by relevance then PR number. */
+export function rankByFit(rows) {
+  const val = (x) => (x == null ? -1 : x);
+  return [...rows].sort((a, b) => val(b.fit?.score) - val(a.fit?.score)
+    || val(b.relevance) - val(a.relevance) || a.number - b.number)
+    .map((row, i) => ({ ...row, rank: i + 1 }));
+}

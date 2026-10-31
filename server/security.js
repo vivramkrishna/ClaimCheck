@@ -14,7 +14,7 @@ export function securityHeaders(request, response, next) {
   response.set({
     'Content-Security-Policy': [
       "default-src 'self'",
-      `script-src 'self' 'nonce-${nonce}' 'unsafe-eval' https://cdn.tailwindcss.com`,
+      `script-src 'self' 'nonce-${nonce}'`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data:",
       "font-src 'self'",

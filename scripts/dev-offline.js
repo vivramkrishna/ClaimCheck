@@ -16,13 +16,13 @@ const inputs = { 2: await load('input.A.json'), 3: await load('input.B.json'), 4
 const dir = await mkdtemp(path.join(tmpdir(), 'prc-offline-'));
 await writeFile(path.join(dir, 'graph.json'), await readFile(path.join(fixtures, 'graph.synthetic.json')));
 await writeFile(path.join(dir, 'manifest.json'), JSON.stringify({
-  repo: { owner: 'demo-owner', name: 'pr-reality-check-demo' },
+  repo: { owner: 'acme', name: 'web-app' },
   graphCommit: inputs[2].manifest.graphCommit, graphifyVersion: 'synthetic'
 }));
-await writeFile(path.join(dir, 'graph.html'), '<!doctype html><meta charset="utf-8"><title>Synthetic graph</title><p>Offline mode: run Graphify on the demo repo to get the real graph.html.</p>');
+await writeFile(path.join(dir, 'graph.html'), '<!doctype html><meta charset="utf-8"><title>Code graph</title><p>The interactive code graph is shown inside the app.</p>');
 
 Object.assign(process.env, {
-  GRAPH_DATA_DIR: dir, CACHE_DIR: path.join(dir, 'cache'), DEMO_REPO_OWNER: 'demo-owner', DEMO_REPO_NAME: 'pr-reality-check-demo',
+  GRAPH_DATA_DIR: dir, CACHE_DIR: path.join(dir, 'cache'), DEMO_REPO_OWNER: 'acme', DEMO_REPO_NAME: 'web-app',
   GITHUB_TOKEN: 'offline', GEMINI_API_KEY: process.env.OFFLINE_USE_GEMINI === '1' ? (process.env.GEMINI_API_KEY ?? '') : '',
 });
 
@@ -31,7 +31,7 @@ globalThis.fetch = async (url, options) => {
   const target = String(url);
   if (!target.startsWith('https://api.github.com/')) return realFetch(url, options);
   const u = new URL(target);
-  const rest = u.pathname.replace('/repos/demo-owner/pr-reality-check-demo/', '');
+  const rest = u.pathname.replace('/repos/acme/web-app/', '');
   let m; let body;
   if (rest === 'pulls') body = Object.values(inputs).map((i) => i.pr);
   else if ((m = rest.match(/^pulls\/(\d+)\/files$/))) body = Number(u.searchParams.get('page') ?? 1) > 1 ? [] : inputs[m[1]]?.files;

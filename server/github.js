@@ -111,13 +111,24 @@ export async function getIssue(number) {
 }
 
 export async function listOpenPRs() {
-  const body = (await request(restUrl('/pulls?state=open&per_page=10'))).body;
+  const body = (await request(restUrl('/pulls?state=open&per_page=30'))).body;
   if (!Array.isArray(body)) {
     const error = new Error('GitHub returned an invalid pull-request list response.');
     error.status = 502;
     throw error;
   }
   return body;
+}
+
+/** Open issues only (GitHub's issues endpoint also returns PRs; drop those). */
+export async function listOpenIssues() {
+  const body = (await request(restUrl('/issues?state=open&per_page=50&sort=created&direction=asc'))).body;
+  if (!Array.isArray(body)) {
+    const error = new Error('GitHub returned an invalid issue list response.');
+    error.status = 502;
+    throw error;
+  }
+  return body.filter((issue) => !issue.pull_request);
 }
 
 export function linkedIssueFromBody(body) {

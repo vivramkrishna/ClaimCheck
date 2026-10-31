@@ -80,7 +80,7 @@
       "id": "E1",
       "kind": "issue_quote",
       "url": "https://github.com/demo-owner/pr-reality-check-demo/issues/1",
-      "text": "Issue #1: Users are logged out a few seconds after logging in\nSteps: POST /login (demo creds) → GET /profile after ~5 s. Expected 200, got:\n\n```\nError: 401 Session expired\n    at validate (src/auth/authService.js:13)\n```\n\nLooks like `isExpired` returns true right after `createSession`."
+      "text": "Issue #1: Users are logged out a few seconds after logging in\nSteps: POST /login (test account) → GET /profile after ~5 s. Expected 200, got:\n\n```\nError: 401 Session expired\n    at validate (src/auth/authService.js:13)\n```\n\nLooks like `isExpired` returns true right after `createSession`."
     },
     {
       "id": "E2",

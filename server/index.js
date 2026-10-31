@@ -4,8 +4,11 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { buildInput, graphDataDir } from './input.js';
+import { graphView } from './graph-view.js';
+import { computeDeterministic } from './analyze.js';
 import { cacheKey, get as getCache, getReplay, listReplays, set as setCache } from './cache.js';
-import { listOpenPRs, resolveLinkedIssue } from './github.js';
+import { listOpenIssues, listOpenPRs, resolveLinkedIssue } from './github.js';
+import { fitScore, rankByFit } from './evidence.js';
 import { loadAnalyzer } from './load-analyzer.js';
 import {
   createRateLimiter,
@@ -81,6 +84,101 @@ async function analyzeOnce(number, mode, key, input) {
   }
 }
 
+/** Attach the measured fit score (graph mode only); never changes the server-owned verdict. */
+function withFit(card) {
+  if (!card || card.mode === 'diffonly') return card;
+  return { ...card, fit: fitScore(card) };
+}
+
+// ---------------- Issues → ranked PRs ----------------
+// Deterministic only (no model call), memoized by PR head SHA + issue + open-PR snapshot,
+// so the issue board is cheap to load and never spends Gemma quota.
+const summaryMemo = new Map();
+
+function summaryRow(pr, linkedIssue, d) {
+  const fit = fitScore(d);
+  return {
+    number: pr.number,
+    title: pr.title,
+    author: pr.user?.login ?? 'unknown',
+    url: pr.html_url ?? null,
+    linkedIssue,
+    fit,
+    relevance: d.metrics?.relevance ?? null,
+    issueAreaHit: d.metrics?.issueAreaHit ?? null,
+    rulePriority: d.rule?.priority ?? 'needs_context',
+    testsChanged: (d.coverage?.testsChanged ?? []).length,
+    godNodesTouched: (d.metrics?.godNodesTouched ?? []).length,
+    unexplained: (d.metrics?.unexplained ?? []).length,
+    duplicates: (d.overlaps ?? []).filter((o) => o.kind === 'possible_duplicate').map((o) => o.pr)
+  };
+}
+
+async function summarizePR(pr, snapshot) {
+  const key = `${pr.number}:${pr.head?.sha}:${snapshot}`;
+  if (!summaryMemo.has(key)) {
+    summaryMemo.set(key, (async () => {
+      const input = await buildInput(pr.number, 'graph');
+      return summaryRow(pr, input.issue?.number ?? null, computeDeterministic(input));
+    })().catch((error) => { summaryMemo.delete(key); throw error; }));
+  }
+  return summaryMemo.get(key);
+}
+
+function groupByIssue(issues, rows) {
+  const byIssue = new Map(issues.map((i) => [i.number, {
+    number: i.number,
+    title: i.title,
+    url: i.html_url ?? null,
+    author: i.user?.login ?? null,
+    excerpt: String(i.body ?? '').replace(/```[\s\S]*?```/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220),
+    prs: []
+  }]));
+  const unlinked = [];
+  for (const row of rows) {
+    if (row.linkedIssue == null) { unlinked.push(row); continue; }
+    if (!byIssue.has(row.linkedIssue)) {
+      byIssue.set(row.linkedIssue, { number: row.linkedIssue, title: `Issue #${row.linkedIssue}`, url: null, author: null, excerpt: '', closedOrMissing: true, prs: [] });
+    }
+    byIssue.get(row.linkedIssue).prs.push(row);
+  }
+  const list = [...byIssue.values()].map((i) => ({ ...i, prs: rankByFit(i.prs) }))
+    .sort((a, b) => a.number - b.number);
+  return { issues: list, unlinked: rankByFit(unlinked) };
+}
+
+app.get('/api/issues', async (request, response) => {
+  try {
+    const [issues, prs] = await Promise.all([listOpenIssues(), listOpenPRs()]);
+    const snapshot = prs.map((p) => `${p.number}@${p.head?.sha}`).sort().join(',')
+      + '|' + issues.map((i) => `${i.number}@${i.updated_at}`).join(',');
+    if (summaryMemo.size > 500) summaryMemo.clear();
+    const rows = await Promise.all(prs.map((pr) => summarizePR(pr, snapshot).catch((error) => ({
+      number: pr.number, title: pr.title, author: pr.user?.login ?? 'unknown', url: pr.html_url ?? null,
+      linkedIssue: null, fit: null, relevance: null, rulePriority: 'needs_context', error: error.message
+    }))));
+    response.json({ source: 'live', ...groupByIssue(issues, rows) });
+  } catch (error) {
+    // GitHub unreachable: rebuild the board from recorded replay cards so the demo still works.
+    try {
+      const replays = await listReplays();
+      if (!replays.length) throw error;
+      const rows = [];
+      for (const r of replays) {
+        const card = await getReplay(r.number, 'graph');
+        if (!card) continue;
+        rows.push(summaryRow({ number: r.number, title: r.title, user: { login: r.author } }, r.linkedIssue,
+          { metrics: card.metrics, coverage: card.coverage, overlaps: card.overlaps, rule: { priority: card.rulePriority } }));
+      }
+      const issues = [...new Set(rows.map((x) => x.linkedIssue).filter((n) => n != null))].map((n) => ({ number: n, title: `Issue #${n}` }));
+      response.set('X-PR-Source', 'replay');
+      response.json({ source: 'replay', ...groupByIssue(issues, rows) });
+    } catch {
+      jsonError(request, response, error);
+    }
+  }
+});
+
 app.get('/api/health', async (_request, response) => {
   let manifest = null;
   let graphNodes = null;
@@ -106,7 +204,7 @@ app.get('/api/health', async (_request, response) => {
     graphLoaded: graphNodes !== null && graphNodes > 0,
     graphNodes,
     repo: process.env.DEMO_REPO_OWNER
-      ? `${process.env.DEMO_REPO_OWNER}/${process.env.DEMO_REPO_NAME || 'pr-reality-check-demo'}`
+      ? `${process.env.DEMO_REPO_OWNER}/${process.env.DEMO_REPO_NAME || 'unknown'}`
       : null,
     githubTokenSet: Boolean(process.env.GITHUB_TOKEN),
     geminiKeySet: Boolean(process.env.GEMINI_API_KEY)
@@ -146,18 +244,43 @@ app.get('/api/analyze/:n', async (request, response) => {
         error.status = 404;
         throw error;
       }
-      return response.json(withMode(replay, 'replay'));
+      return response.json(withFit(withMode(replay, 'replay')));
     }
 
     const input = await buildInput(number, mode);
     const key = cacheKey(input, { promptVersion: analyzer.PROMPT_VERSION });
     if (request.query.refresh !== '1') {
       const cached = await getCache(number, mode, key);
-      if (cached) return response.json(withMode(cached, 'cached'));
+      if (cached) return response.json(withFit(withMode(cached, 'cached')));
     }
 
     const card = await analyzeOnce(number, mode, key, input);
-    response.json(card);
+    response.json(withFit(card));
+  } catch (error) {
+    jsonError(request, response, error);
+  }
+});
+
+app.get('/api/graph', async (request, response) => {
+  try {
+    let raw;
+    try {
+      raw = JSON.parse(await readFile(path.join(graphDataDir(), 'graph.json'), 'utf8'));
+    } catch (error) {
+      if (error.code === 'ENOENT') return response.json({ total: 0, nodes: [], edges: [] });
+      throw error;
+    }
+    let focus = null;
+    const number = Number(request.query.pr);
+    if (Number.isSafeInteger(number) && number > 0 && number < 10_000_000) {
+      try {
+        const d = computeDeterministic(await buildInput(number, 'graph'));
+        focus = { changed: d.diff.touchedIds, issueArea: [...d.area], impacted: d.blast.dependents.map((x) => x.id) };
+      } catch {
+        focus = null; // GitHub unreachable: still show the plain graph.
+      }
+    }
+    response.json(graphView(raw, focus));
   } catch (error) {
     jsonError(request, response, error);
   }

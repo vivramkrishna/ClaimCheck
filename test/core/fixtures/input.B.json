@@ -58,7 +58,7 @@
   "issue": {
     "number": 1,
     "title": "Users are logged out a few seconds after logging in",
-    "body": "Steps: POST /login (demo creds) → GET /profile after ~5 s. Expected 200, got:\n\n```\nError: 401 Session expired\n    at validate (src/auth/authService.js:13)\n```\n\nLooks like `isExpired` returns true right after `createSession`.",
+    "body": "Steps: POST /login (test account) → GET /profile after ~5 s. Expected 200, got:\n\n```\nError: 401 Session expired\n    at validate (src/auth/authService.js:13)\n```\n\nLooks like `isExpired` returns true right after `createSession`.",
     "html_url": "https://github.com/demo-owner/pr-reality-check-demo/issues/1",
     "updated_at": "2026-10-31T05:20:00Z",
     "state": "open"
