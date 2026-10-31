@@ -1,0 +1,712 @@
+{
+  "_synthetic": true,
+  "repo": {
+    "owner": "demo-owner",
+    "name": "pr-reality-check-demo"
+  },
+  "pr": {
+    "number": 3,
+    "title": "Fix login timeout on slow networks",
+    "body": "Fixes #1. Root cause: the 5 s request timeout aborts the session handshake on slow networks, so users get logged out. Raised the timeout to 30 s and added retry-safe dispatch. All tests pass.",
+    "state": "open",
+    "html_url": "https://github.com/demo-owner/pr-reality-check-demo/pull/3",
+    "issue_url": "https://api.github.com/repos/demo-owner/pr-reality-check-demo/issues/3",
+    "user": {
+      "login": "bob-dev"
+    },
+    "head": {
+      "sha": "b0b0000000000000000000000000000000000003",
+      "ref": "fix/login-timeout"
+    },
+    "base": {
+      "sha": "b45e0000000000000000000000000000000000aa",
+      "ref": "main",
+      "repo": {
+        "name": "pr-reality-check-demo",
+        "owner": {
+          "login": "demo-owner"
+        }
+      }
+    }
+  },
+  "files": [
+    {
+      "filename": "src/config.js",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 1,
+      "changes": 2,
+      "patch": "@@ -1,2 +1,2 @@\n export const SESSION_TTL_SECONDS = 3600;\n-export const REQUEST_TIMEOUT_MS = 5000;\n+export const REQUEST_TIMEOUT_MS = 30000;"
+    },
+    {
+      "filename": "src/http/middleware.js",
+      "status": "modified",
+      "additions": 5,
+      "deletions": 3,
+      "changes": 8,
+      "patch": "@@ -9,7 +9,9 @@ export function requireAuth(req) {\n export function withTimeout(handler) {\n   return async (req) => {\n-    const timer = new Promise((_, reject) =>\n-      setTimeout(() => reject(new Error('504 Timeout')), REQUEST_TIMEOUT_MS));\n-    return Promise.race([handler(req), timer]);\n+    let timeoutId;\n+    const timer = new Promise((_, reject) => {\n+      timeoutId = setTimeout(() => reject(new Error('504 Timeout')), REQUEST_TIMEOUT_MS);\n+    });\n+    return Promise.race([handler(req), timer]).finally(() => clearTimeout(timeoutId));\n   };\n }"
+    },
+    {
+      "filename": "src/http/router.js",
+      "status": "modified",
+      "additions": 13,
+      "deletions": 1,
+      "changes": 14,
+      "patch": "@@ -16,12 +16,24 @@ export function handleProfile(req) {\n   return { status: 200, body: { ok: true } };\n }\n\n+async function retryDispatch(handler, req, attempts = 2) {\n+  let lastErr;\n+  for (let i = 0; i < attempts; i++) {\n+    try {\n+      return await withTimeout(handler)(req);\n+    } catch (err) {\n+      lastErr = err;\n+    }\n+  }\n+  throw lastErr;\n+}\n+\n export async function dispatch(req) {\n   const routes = { 'POST /login': handleLogin, 'GET /profile': handleProfile, 'GET /health': health };\n   const handler = routes[`${req.method} ${req.path}`];\n   if (!handler) return { status: 404, body: { error: 'Not found' } };\n   try {\n-    return await withTimeout(handler)(req);\n+    return await retryDispatch(handler, req);\n   } catch (err) {\n     return { status: Number.parseInt(err.message, 10) || 500, body: { error: err.message } };\n   }"
+    }
+  ],
+  "issue": {
+    "number": 1,
+    "title": "Users are logged out a few seconds after logging in",
+    "body": "Steps: POST /login (demo creds) → GET /profile after ~5 s. Expected 200, got:\n\n```\nError: 401 Session expired\n    at validate (src/auth/authService.js:13)\n```\n\nLooks like `isExpired` returns true right after `createSession`.",
+    "html_url": "https://github.com/demo-owner/pr-reality-check-demo/issues/1",
+    "updated_at": "2026-10-31T05:20:00Z",
+    "state": "open"
+  },
+  "linkedIssueSource": "body_regex",
+  "openPRs": [
+    {
+      "number": 2,
+      "title": "Fix session TTL units",
+      "author": "alice-dev",
+      "headSha": "a0a0000000000000000000000000000000000002",
+      "linkedIssue": 1,
+      "files": [
+        {
+          "filename": "src/session/sessionStore.js",
+          "status": "modified",
+          "additions": 1,
+          "deletions": 1,
+          "changes": 2,
+          "patch": "@@ -4,7 +4,7 @@ import { now } from '../utils/time.js';\n const sessions = new Map();\n\n export function createSession(userId, ttlSeconds) {\n-  const session = { id: crypto.randomUUID(), userId, expiresAt: now() + ttlSeconds };\n+  const session = { id: crypto.randomUUID(), userId, expiresAt: now() + ttlSeconds * 1000 };\n   sessions.set(session.id, session);\n   return session;\n }"
+        },
+        {
+          "filename": "tests/session.test.js",
+          "status": "modified",
+          "additions": 5,
+          "deletions": 0,
+          "changes": 5,
+          "patch": "@@ -11,3 +11,8 @@ test('isExpired is false for a fresh session', () => {\n   const s = createSession('demo', 3600);\n   assert.equal(isExpired(s), false);\n });\n+\n+test('session TTL is in seconds (regression for #1)', () => {\n+  const s = createSession('demo', 60);\n+  assert.ok(s.expiresAt - Date.now() > 59_000);\n+});"
+        }
+      ]
+    },
+    {
+      "number": 4,
+      "title": "Convert session expiry to milliseconds",
+      "author": "carol-dev",
+      "headSha": "c0c0000000000000000000000000000000000004",
+      "linkedIssue": 1,
+      "files": [
+        {
+          "filename": "src/utils/time.js",
+          "status": "modified",
+          "additions": 4,
+          "deletions": 0,
+          "changes": 4,
+          "patch": "@@ -1,3 +1,7 @@\n export function now() {\n   return Date.now();\n }\n+\n+export function toMs(seconds) {\n+  return seconds * 1000;\n+}"
+        },
+        {
+          "filename": "src/session/sessionStore.js",
+          "status": "modified",
+          "additions": 2,
+          "deletions": 2,
+          "changes": 4,
+          "patch": "@@ -1,10 +1,10 @@\n import crypto from 'node:crypto';\n-import { now } from '../utils/time.js';\n+import { now, toMs } from '../utils/time.js';\n\n const sessions = new Map();\n\n export function createSession(userId, ttlSeconds) {\n-  const session = { id: crypto.randomUUID(), userId, expiresAt: now() + ttlSeconds };\n+  const session = { id: crypto.randomUUID(), userId, expiresAt: now() + toMs(ttlSeconds) };\n   sessions.set(session.id, session);\n   return session;\n }"
+        }
+      ]
+    }
+  ],
+  "graph": {
+    "directed": true,
+    "multigraph": false,
+    "graph": {},
+    "nodes": [
+      {
+        "id": "src_config",
+        "label": "config.js",
+        "source_file": "src/config.js",
+        "source_location": "L1",
+        "community": 2,
+        "community_name": "Config & Utils",
+        "file_type": "code",
+        "norm_label": "config.js"
+      },
+      {
+        "id": "src_utils_time",
+        "label": "time.js",
+        "source_file": "src/utils/time.js",
+        "source_location": "L1",
+        "community": 2,
+        "community_name": "Config & Utils",
+        "file_type": "code",
+        "norm_label": "time.js"
+      },
+      {
+        "id": "src_session_sessionstore",
+        "label": "sessionStore.js",
+        "source_file": "src/session/sessionStore.js",
+        "source_location": "L1",
+        "community": 0,
+        "community_name": "Session & Auth",
+        "file_type": "code",
+        "norm_label": "sessionstore.js"
+      },
+      {
+        "id": "src_auth_passwords",
+        "label": "passwords.js",
+        "source_file": "src/auth/passwords.js",
+        "source_location": "L1",
+        "community": 0,
+        "community_name": "Session & Auth",
+        "file_type": "code",
+        "norm_label": "passwords.js"
+      },
+      {
+        "id": "src_auth_authservice",
+        "label": "authService.js",
+        "source_file": "src/auth/authService.js",
+        "source_location": "L1",
+        "community": 0,
+        "community_name": "Session & Auth",
+        "file_type": "code",
+        "norm_label": "authservice.js"
+      },
+      {
+        "id": "src_http_middleware",
+        "label": "middleware.js",
+        "source_file": "src/http/middleware.js",
+        "source_location": "L1",
+        "community": 1,
+        "community_name": "HTTP Routing",
+        "file_type": "code",
+        "norm_label": "middleware.js"
+      },
+      {
+        "id": "src_http_router",
+        "label": "router.js",
+        "source_file": "src/http/router.js",
+        "source_location": "L1",
+        "community": 1,
+        "community_name": "HTTP Routing",
+        "file_type": "code",
+        "norm_label": "router.js"
+      },
+      {
+        "id": "src_profile_profileservice",
+        "label": "profileService.js",
+        "source_file": "src/profile/profileService.js",
+        "source_location": "L1",
+        "community": 2,
+        "community_name": "Config & Utils",
+        "file_type": "code",
+        "norm_label": "profileservice.js"
+      },
+      {
+        "id": "tests_session_test",
+        "label": "session.test.js",
+        "source_file": "tests/session.test.js",
+        "source_location": "L1",
+        "community": 3,
+        "community_name": "Tests",
+        "file_type": "code",
+        "norm_label": "session.test.js"
+      },
+      {
+        "id": "tests_auth_test",
+        "label": "auth.test.js",
+        "source_file": "tests/auth.test.js",
+        "source_location": "L1",
+        "community": 3,
+        "community_name": "Tests",
+        "file_type": "code",
+        "norm_label": "auth.test.js"
+      },
+      {
+        "id": "tests_router_test",
+        "label": "router.test.js",
+        "source_file": "tests/router.test.js",
+        "source_location": "L1",
+        "community": 3,
+        "community_name": "Tests",
+        "file_type": "code",
+        "norm_label": "router.test.js"
+      },
+      {
+        "id": "config_session_ttl_seconds",
+        "label": "SESSION_TTL_SECONDS",
+        "source_file": "src/config.js",
+        "source_location": "L1",
+        "community": 0,
+        "community_name": "Session & Auth",
+        "file_type": "code",
+        "norm_label": "session_ttl_seconds"
+      },
+      {
+        "id": "config_request_timeout_ms",
+        "label": "REQUEST_TIMEOUT_MS",
+        "source_file": "src/config.js",
+        "source_location": "L2",
+        "community": 1,
+        "community_name": "HTTP Routing",
+        "file_type": "code",
+        "norm_label": "request_timeout_ms"
+      },
+      {
+        "id": "time_now",
+        "label": "now()",
+        "source_file": "src/utils/time.js",
+        "source_location": "L1",
+        "community": 2,
+        "community_name": "Config & Utils",
+        "file_type": "code",
+        "norm_label": "now()"
+      },
+      {
+        "id": "sessionstore_createsession",
+        "label": "createSession()",
+        "source_file": "src/session/sessionStore.js",
+        "source_location": "L6",
+        "community": 0,
+        "community_name": "Session & Auth",
+        "file_type": "code",
+        "norm_label": "createsession()"
+      },
+      {
+        "id": "sessionstore_getsession",
+        "label": "getSession()",
+        "source_file": "src/session/sessionStore.js",
+        "source_location": "L12",
+        "community": 0,
+        "community_name": "Session & Auth",
+        "file_type": "code",
+        "norm_label": "getsession()"
+      },
+      {
+        "id": "sessionstore_isexpired",
+        "label": "isExpired()",
+        "source_file": "src/session/sessionStore.js",
+        "source_location": "L16",
+        "community": 0,
+        "community_name": "Session & Auth",
+        "file_type": "code",
+        "norm_label": "isexpired()"
+      },
+      {
+        "id": "passwords_checkpassword",
+        "label": "checkPassword()",
+        "source_file": "src/auth/passwords.js",
+        "source_location": "L3",
+        "community": 0,
+        "community_name": "Session & Auth",
+        "file_type": "code",
+        "norm_label": "checkpassword()"
+      },
+      {
+        "id": "authservice_login",
+        "label": "login()",
+        "source_file": "src/auth/authService.js",
+        "source_location": "L5",
+        "community": 0,
+        "community_name": "Session & Auth",
+        "file_type": "code",
+        "norm_label": "login()"
+      },
+      {
+        "id": "authservice_validate",
+        "label": "validate()",
+        "source_file": "src/auth/authService.js",
+        "source_location": "L10",
+        "community": 0,
+        "community_name": "Session & Auth",
+        "file_type": "code",
+        "norm_label": "validate()"
+      },
+      {
+        "id": "middleware_requireauth",
+        "label": "requireAuth()",
+        "source_file": "src/http/middleware.js",
+        "source_location": "L4",
+        "community": 1,
+        "community_name": "HTTP Routing",
+        "file_type": "code",
+        "norm_label": "requireauth()"
+      },
+      {
+        "id": "middleware_withtimeout",
+        "label": "withTimeout()",
+        "source_file": "src/http/middleware.js",
+        "source_location": "L9",
+        "community": 1,
+        "community_name": "HTTP Routing",
+        "file_type": "code",
+        "norm_label": "withtimeout()"
+      },
+      {
+        "id": "router_handlelogin",
+        "label": "handleLogin()",
+        "source_file": "src/http/router.js",
+        "source_location": "L5",
+        "community": 1,
+        "community_name": "HTTP Routing",
+        "file_type": "code",
+        "norm_label": "handlelogin()"
+      },
+      {
+        "id": "router_handleprofile",
+        "label": "handleProfile()",
+        "source_file": "src/http/router.js",
+        "source_location": "L10",
+        "community": 1,
+        "community_name": "HTTP Routing",
+        "file_type": "code",
+        "norm_label": "handleprofile()"
+      },
+      {
+        "id": "router_health",
+        "label": "health()",
+        "source_file": "src/http/router.js",
+        "source_location": "L15",
+        "community": 1,
+        "community_name": "HTTP Routing",
+        "file_type": "code",
+        "norm_label": "health()"
+      },
+      {
+        "id": "router_dispatch",
+        "label": "dispatch()",
+        "source_file": "src/http/router.js",
+        "source_location": "L19",
+        "community": 1,
+        "community_name": "HTTP Routing",
+        "file_type": "code",
+        "norm_label": "dispatch()"
+      },
+      {
+        "id": "profileservice_getprofile",
+        "label": "getProfile()",
+        "source_file": "src/profile/profileService.js",
+        "source_location": "L1",
+        "community": 2,
+        "community_name": "Config & Utils",
+        "file_type": "code",
+        "norm_label": "getprofile()"
+      }
+    ],
+    "links": [
+      {
+        "source": "src_config",
+        "target": "config_session_ttl_seconds",
+        "relation": "contains",
+        "confidence": "EXTRACTED",
+        "source_file": "src/config.js"
+      },
+      {
+        "source": "src_config",
+        "target": "config_request_timeout_ms",
+        "relation": "contains",
+        "confidence": "EXTRACTED",
+        "source_file": "src/config.js"
+      },
+      {
+        "source": "src_utils_time",
+        "target": "time_now",
+        "relation": "contains",
+        "confidence": "EXTRACTED",
+        "source_file": "src/utils/time.js"
+      },
+      {
+        "source": "src_session_sessionstore",
+        "target": "sessionstore_createsession",
+        "relation": "contains",
+        "confidence": "EXTRACTED",
+        "source_file": "src/session/sessionStore.js"
+      },
+      {
+        "source": "src_session_sessionstore",
+        "target": "sessionstore_getsession",
+        "relation": "contains",
+        "confidence": "EXTRACTED",
+        "source_file": "src/session/sessionStore.js"
+      },
+      {
+        "source": "src_session_sessionstore",
+        "target": "sessionstore_isexpired",
+        "relation": "contains",
+        "confidence": "EXTRACTED",
+        "source_file": "src/session/sessionStore.js"
+      },
+      {
+        "source": "src_auth_passwords",
+        "target": "passwords_checkpassword",
+        "relation": "contains",
+        "confidence": "EXTRACTED",
+        "source_file": "src/auth/passwords.js"
+      },
+      {
+        "source": "src_auth_authservice",
+        "target": "authservice_login",
+        "relation": "contains",
+        "confidence": "EXTRACTED",
+        "source_file": "src/auth/authService.js"
+      },
+      {
+        "source": "src_auth_authservice",
+        "target": "authservice_validate",
+        "relation": "contains",
+        "confidence": "EXTRACTED",
+        "source_file": "src/auth/authService.js"
+      },
+      {
+        "source": "src_http_middleware",
+        "target": "middleware_requireauth",
+        "relation": "contains",
+        "confidence": "EXTRACTED",
+        "source_file": "src/http/middleware.js"
+      },
+      {
+        "source": "src_http_middleware",
+        "target": "middleware_withtimeout",
+        "relation": "contains",
+        "confidence": "EXTRACTED",
+        "source_file": "src/http/middleware.js"
+      },
+      {
+        "source": "src_http_router",
+        "target": "router_handlelogin",
+        "relation": "contains",
+        "confidence": "EXTRACTED",
+        "source_file": "src/http/router.js"
+      },
+      {
+        "source": "src_http_router",
+        "target": "router_handleprofile",
+        "relation": "contains",
+        "confidence": "EXTRACTED",
+        "source_file": "src/http/router.js"
+      },
+      {
+        "source": "src_http_router",
+        "target": "router_health",
+        "relation": "contains",
+        "confidence": "EXTRACTED",
+        "source_file": "src/http/router.js"
+      },
+      {
+        "source": "src_http_router",
+        "target": "router_dispatch",
+        "relation": "contains",
+        "confidence": "EXTRACTED",
+        "source_file": "src/http/router.js"
+      },
+      {
+        "source": "src_profile_profileservice",
+        "target": "profileservice_getprofile",
+        "relation": "contains",
+        "confidence": "EXTRACTED",
+        "source_file": "src/profile/profileService.js"
+      },
+      {
+        "source": "sessionstore_createsession",
+        "target": "time_now",
+        "relation": "calls",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "sessionstore_isexpired",
+        "target": "time_now",
+        "relation": "calls",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "authservice_login",
+        "target": "passwords_checkpassword",
+        "relation": "calls",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "authservice_login",
+        "target": "sessionstore_createsession",
+        "relation": "calls",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "authservice_login",
+        "target": "config_session_ttl_seconds",
+        "relation": "uses",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "authservice_validate",
+        "target": "sessionstore_getsession",
+        "relation": "calls",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "authservice_validate",
+        "target": "sessionstore_isexpired",
+        "relation": "calls",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "middleware_requireauth",
+        "target": "authservice_validate",
+        "relation": "calls",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "middleware_withtimeout",
+        "target": "config_request_timeout_ms",
+        "relation": "uses",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "router_handlelogin",
+        "target": "authservice_login",
+        "relation": "calls",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "router_handleprofile",
+        "target": "middleware_requireauth",
+        "relation": "calls",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "router_handleprofile",
+        "target": "profileservice_getprofile",
+        "relation": "calls",
+        "confidence": "INFERRED",
+        "source_file": ""
+      },
+      {
+        "source": "router_dispatch",
+        "target": "router_handlelogin",
+        "relation": "calls",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "router_dispatch",
+        "target": "router_handleprofile",
+        "relation": "calls",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "router_dispatch",
+        "target": "router_health",
+        "relation": "calls",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "router_dispatch",
+        "target": "middleware_withtimeout",
+        "relation": "calls",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "src_session_sessionstore",
+        "target": "src_utils_time",
+        "relation": "imports",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "src_auth_authservice",
+        "target": "src_session_sessionstore",
+        "relation": "imports",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "src_auth_authservice",
+        "target": "src_auth_passwords",
+        "relation": "imports",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "src_auth_authservice",
+        "target": "src_config",
+        "relation": "imports",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "src_http_middleware",
+        "target": "src_auth_authservice",
+        "relation": "imports",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "src_http_middleware",
+        "target": "src_config",
+        "relation": "imports",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "src_http_router",
+        "target": "src_auth_authservice",
+        "relation": "imports",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "src_http_router",
+        "target": "src_http_middleware",
+        "relation": "imports",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "src_http_router",
+        "target": "src_profile_profileservice",
+        "relation": "imports",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "tests_session_test",
+        "target": "src_session_sessionstore",
+        "relation": "imports",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "tests_auth_test",
+        "target": "src_auth_authservice",
+        "relation": "imports",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      },
+      {
+        "source": "tests_router_test",
+        "target": "src_http_router",
+        "relation": "imports",
+        "confidence": "EXTRACTED",
+        "source_file": ""
+      }
+    ]
+  },
+  "manifest": {
+    "repo": "demo-owner/pr-reality-check-demo",
+    "graphCommit": "b45e0000000000000000000000000000000000aa",
+    "graphifyVersion": "synthetic"
+  },
+  "mode": "graph"
+}
