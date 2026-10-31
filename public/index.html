@@ -84,7 +84,7 @@
     }
 
     function formatNumber(number) {
-      return typeof number === 'number' ? String(number) : 'Not available';
+      return typeof number === 'number' ? String(number) : '—';
     }
 
     function safeGithubUrl(url) {
@@ -130,11 +130,12 @@
       const wrapper = element('div', `sticky top-2 z-10 flex flex-col gap-2 rounded-2xl border p-3 shadow-xl backdrop-blur sm:flex-row sm:items-center sm:justify-between ${loud ? 'border-amber-400 bg-amber-950/95' : 'border-slate-700 bg-slate-900/95'}`);
       const left = element('div', 'flex flex-wrap items-center gap-2');
       left.append(pill(mode, loud ? 'bg-amber-400 text-amber-950' : mode === 'CACHED' ? 'bg-violet-400 text-violet-950' : 'bg-emerald-400 text-emerald-950'));
-      left.append(element('span', 'text-xs text-slate-300', `Model: ${value(provenance.model)}`));
       if (provenance.assessmentSource) {
         const fromModel = provenance.assessmentSource === 'model';
-        left.append(pill(fromModel ? 'Gemma assessment' : 'Evidence only (model unavailable)', fromModel ? 'bg-sky-500/15 text-sky-300' : 'bg-amber-500/15 text-amber-300'));
+        left.append(pill(fromModel ? 'Gemma 4' : 'Evidence only (model output rejected)', fromModel ? 'bg-sky-500/15 text-sky-300' : 'bg-amber-500/15 text-amber-300'));
       }
+      left.append(element('span', 'text-xs text-slate-300', `Model: ${value(provenance.model)}`));
+      if (provenance.promptVersion) left.append(element('span', 'text-[11px] text-slate-500', `Prompt: ${provenance.promptVersion}`));
       const commit = provenance.graphCommit ? String(provenance.graphCommit).slice(0, 8) : 'none';
       left.append(element('span', 'text-xs text-slate-300', `Graph: ${commit}`));
       wrapper.append(left);
@@ -219,7 +220,7 @@
       if (metrics.nullReason) {
         wrapper.append(element('p', 'mt-3 rounded-xl bg-amber-500/15 p-3 text-sm font-bold text-amber-300', `Relevance not computed (${String(metrics.nullReason).replaceAll('_', ' ')}). The tool abstains instead of guessing.`));
       }
-      grid.append(metricTile('Issue area hit', metrics.issueAreaHit === null || metrics.issueAreaHit === undefined ? 'Not available' : String(metrics.issueAreaHit)));
+      grid.append(metricTile('Issue area hit', metrics.issueAreaHit === null || metrics.issueAreaHit === undefined ? '—' : String(metrics.issueAreaHit)));
       grid.append(metricTile('Relevance', formatNumber(metrics.relevance), 'Relevance ≠ correctness'));
       grid.append(metricTile('Community overlap', formatNumber(metrics.communityOverlap)));
       grid.append(metricTile('Blast radius', formatNumber(metrics.blastRadius), 'Nodes that may be affected'));
@@ -229,6 +230,12 @@
       Object.entries(metrics.edgeConfidence ?? {}).forEach(([kind, count]) => details.append(pill(`${kind}: ${count}`, kind === 'INFERRED' ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300')));
       if (!details.childNodes.length) details.append(element('span', 'text-sm text-slate-400', 'No god nodes or edge-confidence counts returned.'));
       wrapper.append(details);
+      if ((metrics.issueAreaNodes ?? []).length) {
+        wrapper.append(element('h4', 'mt-5 text-xs font-black uppercase tracking-wider text-slate-400', 'Issue area nodes'));
+        const nodes = element('div', 'mt-2 flex flex-wrap gap-2');
+        metrics.issueAreaNodes.forEach((node) => nodes.append(pill(node, 'bg-sky-500/15 text-sky-300')));
+        wrapper.append(nodes);
+      }
       const unexplained = metrics.unexplained ?? [];
       if (unexplained.length) {
         wrapper.append(element('h4', 'mt-5 text-xs font-black uppercase tracking-wider text-slate-400', 'Changes outside the issue area'));
@@ -262,6 +269,13 @@
       if ((coverage.unmappedAdditions ?? []).length) coverage.unmappedAdditions.forEach((item) => additions.append(pill(item)));
       else additions.append(element('span', 'text-sm text-slate-500', 'None'));
       wrapper.append(additions);
+      const changedTests = coverage.testsChanged ?? [];
+      if (changedTests.length) {
+        wrapper.append(element('h4', 'mt-5 text-xs font-black uppercase tracking-wider text-slate-400', 'Tests changed in this PR'));
+        const tests = element('div', 'mt-2 flex flex-wrap gap-2');
+        changedTests.forEach((name) => tests.append(pill(name, 'bg-emerald-500/15 text-emerald-300')));
+        wrapper.append(tests);
+      }
       return wrapper;
     }
 
@@ -296,7 +310,8 @@
       overlaps.forEach((overlap) => {
         const duplicate = overlap.kind === 'possible_duplicate';
         const item = element('div', 'rounded-xl border border-slate-800 bg-slate-950/60 p-4');
-        item.append(pill(duplicate ? `Possible duplicate of #${overlap.pr}` : `Coordinate with #${overlap.pr}`, duplicate ? 'bg-rose-500/15 text-rose-300' : 'bg-violet-500/15 text-violet-300'));
+        const overlapLabel = `${duplicate ? `Possible duplicate of #${overlap.pr}` : `Coordinate with #${overlap.pr}`}${overlap.sameIssue ? ' · same issue' : ''}`;
+        item.append(pill(overlapLabel, duplicate ? 'bg-rose-500/15 text-rose-300' : 'bg-violet-500/15 text-violet-300'));
         item.append(element('p', 'mt-2 text-xs text-slate-400', `Jaccard: ${formatNumber(overlap.jaccard)} · Shared: ${(overlap.shared ?? []).join(', ') || 'not listed'}`));
         list.append(item);
       });

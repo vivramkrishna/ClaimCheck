@@ -11,6 +11,8 @@
   "provenance": {
     "mode": "live",
     "model": "stub",
+    "assessmentSource": "fallback",
+    "promptVersion": "synthetic-v1",
     "graphCommit": "synthetic-base-sha",
     "graphifyVersion": "synthetic",
     "generatedAt": "2026-10-31T06:00:00.000Z"
