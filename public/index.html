@@ -131,6 +131,10 @@
       const left = element('div', 'flex flex-wrap items-center gap-2');
       left.append(pill(mode, loud ? 'bg-amber-400 text-amber-950' : mode === 'CACHED' ? 'bg-violet-400 text-violet-950' : 'bg-emerald-400 text-emerald-950'));
       left.append(element('span', 'text-xs text-slate-300', `Model: ${value(provenance.model)}`));
+      if (provenance.assessmentSource) {
+        const fromModel = provenance.assessmentSource === 'model';
+        left.append(pill(fromModel ? 'Gemma assessment' : 'Evidence only (model unavailable)', fromModel ? 'bg-sky-500/15 text-sky-300' : 'bg-amber-500/15 text-amber-300'));
+      }
       const commit = provenance.graphCommit ? String(provenance.graphCommit).slice(0, 8) : 'none';
       left.append(element('span', 'text-xs text-slate-300', `Graph: ${commit}`));
       wrapper.append(left);
@@ -167,7 +171,7 @@
       claim.append(element('h4', 'text-xs font-black uppercase tracking-wider text-slate-400', 'Claim'));
       claim.append(element('p', 'mt-2 text-sm leading-6 text-slate-200', value(card.assessment?.claim_summary)));
       const reality = element('div', 'rounded-xl border border-slate-800 bg-slate-950/60 p-4');
-      reality.append(element('h4', 'text-xs font-black uppercase tracking-wider text-sky-400', 'Graph-grounded reality'));
+      reality.append(element('h4', 'text-xs font-black uppercase tracking-wider text-sky-400', card.mode === 'diffonly' ? 'Reality (diff-only, no graph)' : 'Graph-grounded reality'));
       reality.append(element('p', 'mt-2 text-sm leading-6 text-slate-200', value(card.assessment?.reality_summary)));
       grid.append(claim, reality);
       wrapper.append(grid);
@@ -212,7 +216,10 @@
       const metrics = card.metrics;
       if (!metrics) { wrapper.append(empty('Metrics are unavailable in diff-only mode or when graph evidence is insufficient.')); return wrapper; }
       const grid = element('div', 'mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4');
-      grid.append(metricTile('Issue area hit', String(metrics.issueAreaHit)));
+      if (metrics.nullReason) {
+        wrapper.append(element('p', 'mt-3 rounded-xl bg-amber-500/15 p-3 text-sm font-bold text-amber-300', `Relevance not computed (${String(metrics.nullReason).replaceAll('_', ' ')}). The tool abstains instead of guessing.`));
+      }
+      grid.append(metricTile('Issue area hit', metrics.issueAreaHit === null || metrics.issueAreaHit === undefined ? 'Not available' : String(metrics.issueAreaHit)));
       grid.append(metricTile('Relevance', formatNumber(metrics.relevance), 'Relevance ≠ correctness'));
       grid.append(metricTile('Community overlap', formatNumber(metrics.communityOverlap)));
       grid.append(metricTile('Blast radius', formatNumber(metrics.blastRadius), 'Nodes that may be affected'));
@@ -222,6 +229,20 @@
       Object.entries(metrics.edgeConfidence ?? {}).forEach(([kind, count]) => details.append(pill(`${kind}: ${count}`, kind === 'INFERRED' ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300')));
       if (!details.childNodes.length) details.append(element('span', 'text-sm text-slate-400', 'No god nodes or edge-confidence counts returned.'));
       wrapper.append(details);
+      const unexplained = metrics.unexplained ?? [];
+      if (unexplained.length) {
+        wrapper.append(element('h4', 'mt-5 text-xs font-black uppercase tracking-wider text-slate-400', 'Changes outside the issue area'));
+        const list = element('div', 'mt-2 flex flex-wrap gap-2');
+        unexplained.forEach((item) => {
+          const text = `${value(item.label)}${item.file ? ` · ${item.file}${item.line ? `:${item.line}` : ''}` : ''}`;
+          const url = safeGithubUrl(item.url);
+          if (!url) { list.append(pill(text)); return; }
+          const link = element('a', 'inline-flex rounded-full bg-rose-500/15 px-2.5 py-1 text-xs font-bold text-rose-300 hover:bg-rose-500/25', text);
+          link.href = url; link.target = '_blank'; link.rel = 'noreferrer';
+          list.append(link);
+        });
+        wrapper.append(list);
+      }
       return wrapper;
     }
 
@@ -409,7 +430,13 @@
       try {
         const healthResponse = await fetch('/api/health');
         const health = await healthResponse.json();
-        byId('health').textContent = health.ok ? `${String(health.analyzer).toUpperCase()} · v${health.version}` : 'Unavailable';
+        const missing = [];
+        if (health.ok && !health.graphLoaded) missing.push('no graph');
+        if (health.ok && !health.githubTokenSet) missing.push('no GitHub token');
+        if (health.ok && !health.geminiKeySet) missing.push('no Gemini key');
+        byId('health').textContent = health.ok
+          ? `${String(health.analyzer).toUpperCase()} · v${health.version}${missing.length ? ` · ${missing.join(', ')}` : ''}`
+          : 'Unavailable';
       } catch {
         byId('health').textContent = 'Unavailable';
       }
@@ -417,6 +444,10 @@
         const prsResponse = await fetch('/api/prs');
         const prs = await prsResponse.json();
         if (!prsResponse.ok) throw new Error(prs.error ?? 'Could not load pull requests.');
+        if (prsResponse.headers.get('X-PR-Source') === 'replay' && !state.replay) {
+          // GitHub unreachable: only recorded cards can be shown, so switch to replay loudly.
+          state.replay = true;
+        }
         state.prs = prs;
         if (!state.selected && prs.length) state.selected = prs[0].number;
         renderPRs();

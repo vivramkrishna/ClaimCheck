@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -59,6 +59,33 @@ export async function getReplay(prNumber, mode) {
     if (error.code === 'ENOENT') return null;
     throw error;
   }
+}
+
+/** PR summaries reconstructed from recorded replay cards (used when GitHub is unreachable). */
+export async function listReplays() {
+  let names;
+  try {
+    names = await readdir(replayDir);
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+  const byNumber = new Map();
+  for (const name of names.filter((n) => /^\d+-(graph|diffonly)\.json$/.test(n)).sort()) {
+    const card = JSON.parse(await readFile(path.join(replayDir, name), 'utf8'));
+    const number = card?.pr?.number;
+    if (!Number.isInteger(number) || byNumber.has(number)) continue;
+    byNumber.set(number, {
+      number,
+      title: card.pr.title ?? '',
+      author: card.pr.author ?? 'unknown',
+      headSha: card.pr.headSha ?? '',
+      linkedIssue: card.pr.linkedIssue ?? null,
+      url: null,
+      source: 'replay'
+    });
+  }
+  return [...byNumber.values()].sort((a, b) => a.number - b.number);
 }
 
 export function cachePromptVersion() {

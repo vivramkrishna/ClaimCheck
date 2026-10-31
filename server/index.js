@@ -3,8 +3,8 @@ import express from 'express';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { buildInput } from './input.js';
-import { cacheKey, get as getCache, getReplay, set as setCache } from './cache.js';
+import { buildInput, graphDataDir } from './input.js';
+import { cacheKey, get as getCache, getReplay, listReplays, set as setCache } from './cache.js';
 import { listOpenPRs, resolveLinkedIssue } from './github.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -54,14 +54,35 @@ function withMode(card, mode) {
 }
 
 app.get('/api/health', async (_request, response) => {
-  let graphCommit = null;
+  let manifest = null;
+  let graphNodes = null;
   try {
-    const manifest = JSON.parse(await readFile(path.join(root, 'data', 'manifest.json'), 'utf8'));
-    graphCommit = manifest.graphCommit ?? null;
+    manifest = JSON.parse(await readFile(path.join(graphDataDir(), 'manifest.json'), 'utf8'));
   } catch (error) {
     if (error.code !== 'ENOENT') return jsonError(response, error);
   }
-  response.json({ ok: true, version: packageJson.version, graphCommit, analyzer: analyzerKind });
+  try {
+    const graph = JSON.parse(await readFile(path.join(graphDataDir(), 'graph.json'), 'utf8'));
+    graphNodes = Array.isArray(graph.nodes) ? graph.nodes.length : 0;
+  } catch (error) {
+    if (error.code !== 'ENOENT') return jsonError(response, error);
+  }
+  // Booleans only: never echo secrets or their lengths.
+  response.json({
+    ok: true,
+    version: packageJson.version,
+    analyzer: analyzerKind,
+    promptVersion: analyzer.PROMPT_VERSION,
+    model: process.env.GEMMA_MODEL || 'gemma-4-26b-a4b-it',
+    graphCommit: manifest?.graphCommit ?? null,
+    graphLoaded: graphNodes !== null && graphNodes > 0,
+    graphNodes,
+    repo: process.env.DEMO_REPO_OWNER
+      ? `${process.env.DEMO_REPO_OWNER}/${process.env.DEMO_REPO_NAME || 'pr-reality-check-demo'}`
+      : null,
+    githubTokenSet: Boolean(process.env.GITHUB_TOKEN),
+    geminiKeySet: Boolean(process.env.GEMINI_API_KEY)
+  });
 });
 
 app.get('/api/prs', async (_request, response) => {
@@ -77,6 +98,12 @@ app.get('/api/prs', async (_request, response) => {
     })));
     response.json(result);
   } catch (error) {
+    // Wi-Fi / GitHub backup: if replay cards exist, list those PRs so replay mode still works.
+    const replays = await listReplays().catch(() => []);
+    if (replays.length) {
+      response.set('X-PR-Source', 'replay');
+      return response.json(replays);
+    }
     jsonError(response, error);
   }
 });
@@ -102,7 +129,8 @@ app.get('/api/analyze/:n', async (request, response) => {
     }
 
     const card = await analyzer.analyze(input);
-    await setCache(number, mode, key, card);
+    const modelAnswered = card?.provenance?.assessmentSource !== 'fallback';
+    if (modelAnswered || !process.env.GEMINI_API_KEY) await setCache(number, mode, key, card);
     response.json(card);
   } catch (error) {
     jsonError(response, error);
@@ -110,7 +138,7 @@ app.get('/api/analyze/:n', async (request, response) => {
 });
 
 app.get('/graph', (_request, response) => {
-  response.sendFile(path.join(root, 'data', 'graph.html'), (error) => {
+  response.sendFile(path.join(graphDataDir(), 'graph.html'), (error) => {
     if (!error || response.headersSent) return;
     response.status(error.statusCode === 404 ? 404 : 500).type('html').send(
       '<!doctype html><title>Graph unavailable</title><main><h1>Graph unavailable</h1><p>Copy Graphify\'s graph.html into data/ and try again.</p></main>'

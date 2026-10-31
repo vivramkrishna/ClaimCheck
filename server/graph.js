@@ -21,9 +21,10 @@ export const TEST_RE = /(^|\/)(tests?|__tests__|specs?)(\/)|\.(test|spec)\.[a-z0
 export const isTestFile = (f) => TEST_RE.test(f ?? '');
 
 const RELATION_ALIASES = {
-  call: 'calls', invokes: 'calls', invoke: 'calls',
-  import: 'imports', imports_from: 'imports', import_from: 'imports',
-  use: 'uses', reference: 'references', refs: 'references',
+  call: 'calls', invokes: 'calls', invoke: 'calls', indirect_call: 'calls', instantiates: 'calls',
+  import: 'imports', imports_from: 'imports', import_from: 'imports', re_exports: 'imports',
+  use: 'uses', uses_static_prop: 'uses', reference: 'references', refs: 'references',
+  references_constant: 'references',
   inherit: 'inherits', extends: 'inherits', implements: 'inherits',
   contain: 'contains', has: 'contains',
 };

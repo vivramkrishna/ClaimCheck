@@ -6,6 +6,7 @@ import path from 'node:path';
 
 process.env.DEMO_REPO_OWNER = 'example';
 process.env.DEMO_REPO_NAME = 'pr-reality-check-demo';
+process.env.GEMINI_API_KEY = ''; // never call the real model from tests
 
 const { app, analyzerKind } = await import('../../server/index.js');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -53,25 +54,29 @@ function githubFetch(url) {
   return Promise.resolve(Response.json({ message: `Unexpected URL ${target}` }, { status: 500 }));
 }
 
-test('health reports the stub analyzer', async () => {
+test('health reports the real analyzer and config flags without secrets', async () => {
   const response = await invoke('/api/health');
   assert.equal(response.status, 200);
   assert.equal(response.json.ok, true);
-  assert.equal(response.json.analyzer, 'stub');
-  assert.equal(analyzerKind, 'stub');
+  assert.equal(response.json.analyzer, 'real');
+  assert.equal(analyzerKind, 'real');
+  assert.equal(typeof response.json.githubTokenSet, 'boolean');
+  assert.equal(typeof response.json.geminiKeySet, 'boolean');
+  assert.ok(!JSON.stringify(response.json).includes(process.env.GITHUB_TOKEN || '\u0000none'));
 });
 
-test('analyze route uses the stub with mocked GitHub fetch', async () => {
+test('analyze route returns a schema-valid evidence card with mocked GitHub fetch', async () => {
   mock.method(globalThis, 'fetch', githubFetch);
   const response = await invoke('/api/analyze/:n', {
     params: { n: '907123' }, query: { mode: 'graph', refresh: '1' }
   });
   assert.equal(response.status, 200);
-  assert.equal(response.json._synthetic, true);
   assert.equal(response.json.mode, 'graph');
   assert.equal(response.json.pr.number, 907123);
   assert.equal(response.json.pr.linkedIssue, 1);
   assert.equal(response.json.provenance.mode, 'live');
+  // No files and no graph: the engine must abstain, not guess.
+  assert.equal(response.json.finalPriority, 'needs_context');
 });
 
 test('analyze route validates PR number and mode before network calls', async () => {

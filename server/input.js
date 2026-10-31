@@ -11,12 +11,17 @@ import {
 } from './github.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+/** Where graph.json / graph.html / manifest.json live. GRAPH_DATA_DIR overrides it (tests). */
+export function graphDataDir() {
+  return process.env.GRAPH_DATA_DIR ? path.resolve(process.env.GRAPH_DATA_DIR) : path.join(root, 'data');
+}
 let graphAssetsPromise;
 const fileMemo = new Map();
 
 async function readJsonIfPresent(relativePath, fallback) {
   try {
-    return JSON.parse(await readFile(path.join(root, relativePath), 'utf8'));
+    return JSON.parse(await readFile(path.join(graphDataDir(), relativePath), 'utf8'));
   } catch (error) {
     if (error.code === 'ENOENT') return fallback;
     throw error;
@@ -25,8 +30,8 @@ async function readJsonIfPresent(relativePath, fallback) {
 
 function graphAssets() {
   graphAssetsPromise ??= Promise.all([
-    readJsonIfPresent('data/graph.json', { nodes: [], links: [] }),
-    readJsonIfPresent('data/manifest.json', {
+    readJsonIfPresent('graph.json', { nodes: [], links: [] }),
+    readJsonIfPresent('manifest.json', {
       repo: currentRepo(), graphCommit: null, graphifyVersion: null
     })
   ]);

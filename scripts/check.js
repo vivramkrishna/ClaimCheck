@@ -51,7 +51,7 @@ function inspectGraph(file) {
   const imports = g.edges.filter((e) => e.relation === 'imports').slice(0, 3);
   for (const e of imports) console.log(`    import: ${getNode(idx, e.source)?.file ?? e.source} -> ${getNode(idx, e.target)?.label ?? e.target}`);
   console.log(`\nGod nodes: ${godNodes(idx).map((id) => getNode(idx, id)?.label ?? id).join(', ')}`);
-  const unknown = Object.keys(rels).filter((r) => !['calls', 'uses', 'references', 'inherits', 'imports', 'contains', 'method', 'defines'].includes(r));
+  const unknown = Object.keys(rels).filter((r) => !['calls', 'uses', 'references', 'inherits', 'imports', 'contains', 'method', 'defines', 'rationale_for'].includes(r));
   if (unknown.length) console.log(`\nUnknown relations (not used for call/impact traversal): ${unknown.join(', ')} -> add aliases in RELATION_ALIASES (server/graph.js) if they mean calls/imports.`);
 }
 

@@ -71,22 +71,28 @@ Configure these environment variables:
 - `DEMO_REPO_OWNER` — GitHub owner of the demo repository.
 - `DEMO_REPO_NAME` — default `pr-reality-check-demo`.
 
-Generate the base graph from the synthetic demo repository on a trusted laptop:
+Optional: `EDGE_SOURCE_IS_CALLER` (default `true`), `GEMMA_THINKING_LEVEL` (set `minimal` if calls are slow), `GEMMA_TIMEOUT_MS` (default `45000`). `GET /api/health` reports `graphLoaded`, `githubTokenSet` and `geminiKeySet` as booleans so you can see what is missing without exposing secrets.
+
+Generate the base graph from the synthetic demo repository (after its `main` is pushed) on a trusted laptop:
 
 ```bash
 uv tool install graphifyy
-GRAPHIFY_BACKEND=none graphify extract . --code-only
+scripts/import-graph.sh ../pr-reality-check-demo
 ```
 
-Copy `graph.json` and `graph.html` into `data/`, then write `data/manifest.json` with `repo`, `graphCommit`, and `graphifyVersion`. Do not push to the demo repository's `main` after opening the three PRs; they must keep the same graph base.
+The script runs `GRAPHIFY_BACKEND=none graphify extract . --code-only` on the demo repo's `main`, copies `graph.json` / `graph.html` into `data/`, writes `data/manifest.json` (`repo`, `graphCommit`, `graphifyVersion`) and prints the graph checklist (`node scripts/check.js --inspect data/graph.json`). Do not push to the demo repository's `main` after opening the three PRs; they must keep the same graph base.
 
 Useful commands:
 
 ```bash
-npm test
-npm run check -- 2
-node scripts/warm-cache.js https://<cloudways-url>
+npm test                                   # 80+ tests: engine, app routes, end-to-end HTTP, Gemini SDK wiring
+npm run dev:offline                        # full app on SYNTHETIC fixtures, no tokens or network needed
+npm run check -- 3 --no-llm                # deterministic evidence for a real PR
+npm run check -- 3                         # + Gemma 4
+node scripts/warm-cache.js https://<cloudways-url>   # record replay cards for the demo
 ```
+
+If GitHub is unreachable during the demo, `/api/prs` falls back to the recorded replay cards and the UI switches to the amber REPLAY mode automatically.
 
 ## Contributor agent skill
 

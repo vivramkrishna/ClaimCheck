@@ -11,7 +11,8 @@
   "scripts": {
     "start": "node server/index.js",
     "test": "node --test",
-    "check": "node scripts/check.js"
+    "check": "node scripts/check.js",
+    "dev:offline": "node scripts/dev-offline.js"
   },
   "dependencies": {
     "@google/genai": "^1.27.0",

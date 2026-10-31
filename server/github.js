@@ -10,10 +10,12 @@ function repoConfig() {
 
 function headers() {
   const result = {
-    Authorization: `Bearer ${process.env.GITHUB_TOKEN ?? ''}`,
     Accept: 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28'
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'pr-reality-check'
   };
+  // An empty "Bearer " header makes GitHub answer 401; without a token, public repos still work (60 req/h).
+  if (process.env.GITHUB_TOKEN) result.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
   return result;
 }
 
@@ -97,6 +99,8 @@ export async function resolveLinkedIssue(pr) {
 
   // Do not use pr.issue_url: it points to the pull request's own issue record,
   // not to an issue that the pull request closes.
+  // GraphQL always needs a token; without one, only the body regex is available.
+  if (!process.env.GITHUB_TOKEN) return null;
   const { owner, name } = repoConfig();
   const query = `query($owner:String!,$name:String!,$n:Int!){
     repository(owner:$owner,name:$name){
