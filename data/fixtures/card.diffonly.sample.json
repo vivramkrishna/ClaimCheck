@@ -1,0 +1,46 @@
+{
+  "_synthetic": true,
+  "mode": "diffonly",
+  "pr": {
+    "number": 2,
+    "title": "Fix login timeout on slow networks",
+    "author": "demo-contributor",
+    "headSha": "synthetic-pr-b-sha",
+    "linkedIssue": 1
+  },
+  "provenance": {
+    "mode": "live",
+    "model": "stub",
+    "graphCommit": "synthetic-base-sha",
+    "graphifyVersion": "synthetic",
+    "generatedAt": "2026-10-31T06:00:00.000Z"
+  },
+  "coverage": null,
+  "metrics": null,
+  "testsToRun": [],
+  "overlaps": [],
+  "evidence": [],
+  "rulePriority": null,
+  "assessment": {
+    "claim_summary": "The PR claims a longer request timeout and retry-safe dispatch fix session failures on slow networks.",
+    "reality_summary": "The diff changes timeout and routing behavior, but diff-only context cannot establish whether that addresses session expiry.",
+    "findings": [
+      {
+        "text": "The change is plausible from the PR description, but the diff alone does not connect request timeout behavior to session expiration.",
+        "severity": "warn",
+        "evidence": []
+      }
+    ],
+    "tests": [],
+    "questions_for_contributor": [
+      "Can you provide a regression test that reproduces the reported logout?"
+    ],
+    "suggested_priority": "needs_context",
+    "confidence": "low",
+    "limitations": [
+      "Diff-only review has no issue anchors, graph paths, impact analysis, tests, or overlap evidence."
+    ]
+  },
+  "finalPriority": "needs_context",
+  "priorityReason": "The diff-only view lacks structural evidence connecting the changed router code to the issue."
+}

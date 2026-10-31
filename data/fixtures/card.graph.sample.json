@@ -1,0 +1,141 @@
+{
+  "_synthetic": true,
+  "mode": "graph",
+  "pr": {
+    "number": 2,
+    "title": "Fix login timeout on slow networks",
+    "author": "demo-contributor",
+    "headSha": "synthetic-pr-b-sha",
+    "linkedIssue": 1
+  },
+  "provenance": {
+    "mode": "live",
+    "model": "stub",
+    "graphCommit": "synthetic-base-sha",
+    "graphifyVersion": "synthetic",
+    "generatedAt": "2026-10-31T06:00:00.000Z"
+  },
+  "coverage": {
+    "precision": "symbol",
+    "mappedLines": 12,
+    "changedLines": 15,
+    "unmappedAdditions": ["retryDispatch"],
+    "graphStale": false
+  },
+  "metrics": {
+    "issueAreaHit": false,
+    "relevance": 0,
+    "communityOverlap": 0,
+    "blastRadius": 7,
+    "godNodesTouched": ["dispatch"],
+    "edgeConfidence": {
+      "EXTRACTED": 6,
+      "INFERRED": 1
+    }
+  },
+  "testsToRun": ["tests/router.test.js", "tests/auth.test.js"],
+  "overlaps": [
+    {
+      "pr": 3,
+      "kind": "coordinate",
+      "jaccard": 0,
+      "shared": ["auth request path"]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "E1",
+      "kind": "issue_quote",
+      "url": "https://github.com/example/pr-reality-check-demo/issues/1",
+      "text": "The issue stack points to validate in src/auth/authService.js and reports an expired session."
+    },
+    {
+      "id": "E2",
+      "kind": "diff_hunk",
+      "file": "src/config.js",
+      "lines": "L2",
+      "url": "https://github.com/example/pr-reality-check-demo/blob/synthetic-pr-b-sha/src/config.js#L2",
+      "text": "REQUEST_TIMEOUT_MS changes from 5000 to 30000."
+    },
+    {
+      "id": "E3",
+      "kind": "touched_node",
+      "file": "src/http/router.js",
+      "lines": "L8-L25",
+      "node": "dispatch",
+      "url": "https://github.com/example/pr-reality-check-demo/blob/synthetic-pr-b-sha/src/http/router.js#L8-L25",
+      "text": "The PR changes dispatch and adds retryDispatch."
+    },
+    {
+      "id": "E4",
+      "kind": "graph_path",
+      "url": "https://github.com/example/pr-reality-check-demo/blob/synthetic-base-sha/src/session/sessionStore.js#L5-L16",
+      "text": "The issue anchors createSession, isExpired, and validate are not touched by this PR."
+    },
+    {
+      "id": "E5",
+      "kind": "blast_radius",
+      "url": "https://github.com/example/pr-reality-check-demo/blob/synthetic-base-sha/src/http/router.js#L8-L25",
+      "text": "dispatch is a high-degree hub on the login, profile, and health request paths and may affect seven dependent nodes."
+    },
+    {
+      "id": "E6",
+      "kind": "metric",
+      "url": "https://github.com/example/pr-reality-check-demo/pull/2/files",
+      "text": "Issue-area hit is false and graph relevance is 0 for non-test touched nodes."
+    },
+    {
+      "id": "E7",
+      "kind": "coverage_gap",
+      "url": "https://github.com/example/pr-reality-check-demo/pull/2/files",
+      "text": "retryDispatch is a new definition and is not present in the base-commit graph."
+    }
+  ],
+  "rulePriority": "likely_off_target",
+  "assessment": {
+    "claim_summary": "The PR claims the five-second request timeout causes the session-expiry report and raises it to 30 seconds with retry-safe dispatch.",
+    "reality_summary": "The change affects timeout and routing code, while the issue points to session expiry code that this PR does not touch.",
+    "findings": [
+      {
+        "text": "None of the issue-anchored session functions are changed.",
+        "severity": "risk",
+        "evidence": ["E1", "E4", "E6"]
+      },
+      {
+        "text": "The PR changes dispatch, a high-degree request hub that may affect unrelated routes.",
+        "severity": "warn",
+        "evidence": ["E3", "E5"]
+      },
+      {
+        "text": "The new retryDispatch helper is not mapped in the base graph.",
+        "severity": "info",
+        "evidence": ["E7"]
+      }
+    ],
+    "tests": [
+      {
+        "kind": "existing",
+        "name": "tests/router.test.js",
+        "reason": "Exercises the changed dispatch path.",
+        "evidence": ["E3", "E5"]
+      },
+      {
+        "kind": "proposed",
+        "name": "session remains valid after five seconds",
+        "reason": "Directly checks the issue symptom against the session-expiry path.",
+        "evidence": ["E1", "E4"]
+      }
+    ],
+    "questions_for_contributor": [
+      "What evidence connects the request timeout to the session expiration reported in validate?",
+      "Can you add a regression test that waits past five seconds and verifies the session remains valid?"
+    ],
+    "suggested_priority": "likely_off_target",
+    "confidence": "medium",
+    "limitations": [
+      "The new retryDispatch helper is not in the base graph and needs_context until the graph is refreshed."
+    ]
+  },
+  "finalPriority": "likely_off_target",
+  "priorityReason": "The mapped changes miss the issue area and have zero graph relevance; ask for evidence connecting timeout handling to session expiry."
+}
