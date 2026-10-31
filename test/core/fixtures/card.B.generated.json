@@ -1,0 +1,255 @@
+{
+  "mode": "graph",
+  "pr": {
+    "number": 3,
+    "title": "Fix login timeout on slow networks",
+    "author": "bob-dev",
+    "headSha": "b0b0000000000000000000000000000000000003",
+    "linkedIssue": 1
+  },
+  "provenance": {
+    "mode": "live",
+    "model": "gemma-4-26b-a4b-it",
+    "assessmentSource": "model",
+    "graphCommit": "b45e0000000000000000000000000000000000aa",
+    "graphifyVersion": "synthetic",
+    "promptVersion": "core-v1",
+    "generatedAt": "2026-10-31T05:50:06.691Z"
+  },
+  "coverage": {
+    "precision": "symbol",
+    "mappedLines": 23,
+    "changedLines": 23,
+    "unmappedAdditions": [
+      "retryDispatch"
+    ],
+    "graphStale": false,
+    "testsChanged": []
+  },
+  "metrics": {
+    "issueAreaHit": false,
+    "issueAreaNodes": [],
+    "relevance": 0,
+    "communityOverlap": 0,
+    "unexplained": [
+      {
+        "id": "config_request_timeout_ms",
+        "label": "REQUEST_TIMEOUT_MS",
+        "file": "src/config.js",
+        "line": 2,
+        "url": "https://github.com/demo-owner/pr-reality-check-demo/blob/b45e0000000000000000000000000000000000aa/src/config.js#L2"
+      },
+      {
+        "id": "middleware_withtimeout",
+        "label": "withTimeout()",
+        "file": "src/http/middleware.js",
+        "line": 9,
+        "url": "https://github.com/demo-owner/pr-reality-check-demo/blob/b45e0000000000000000000000000000000000aa/src/http/middleware.js#L9"
+      },
+      {
+        "id": "router_dispatch",
+        "label": "dispatch()",
+        "file": "src/http/router.js",
+        "line": 19,
+        "url": "https://github.com/demo-owner/pr-reality-check-demo/blob/b45e0000000000000000000000000000000000aa/src/http/router.js#L19"
+      },
+      {
+        "id": "src_http_router",
+        "label": "router.js",
+        "file": "src/http/router.js",
+        "line": 1,
+        "url": "https://github.com/demo-owner/pr-reality-check-demo/blob/b45e0000000000000000000000000000000000aa/src/http/router.js#L1"
+      }
+    ],
+    "blastRadius": 4,
+    "godNodesTouched": [
+      "router_dispatch"
+    ],
+    "edgeConfidence": {
+      "EXTRACTED": 4
+    },
+    "nullReason": null
+  },
+  "testsToRun": [
+    "tests/auth.test.js",
+    "tests/router.test.js"
+  ],
+  "overlaps": [],
+  "evidence": [
+    {
+      "id": "E1",
+      "kind": "issue_quote",
+      "url": "https://github.com/demo-owner/pr-reality-check-demo/issues/1",
+      "text": "Issue #1: Users are logged out a few seconds after logging in\nSteps: POST /login (demo creds) → GET /profile after ~5 s. Expected 200, got:\n\n```\nError: 401 Session expired\n    at validate (src/auth/authService.js:13)\n```\n\nLooks like `isExpired` returns true right after `createSession`."
+    },
+    {
+      "id": "E2",
+      "kind": "issue_quote",
+      "url": "https://github.com/demo-owner/pr-reality-check-demo/issues/1",
+      "text": "Issue anchors found in the graph: validate() [exact], isExpired() [exact], createSession() [exact], src/auth/authService.js [file]"
+    },
+    {
+      "id": "E3",
+      "kind": "metric",
+      "url": "https://github.com/demo-owner/pr-reality-check-demo/pull/3/files",
+      "text": "issueAreaHit=false; relevance=0; communityOverlap=0\nchanged symbols (non-test): REQUEST_TIMEOUT_MS, withTimeout(), dispatch()\nin issue area: none\noutside issue area: REQUEST_TIMEOUT_MS, withTimeout(), dispatch(), router.js"
+    },
+    {
+      "id": "E4",
+      "kind": "touched_node",
+      "url": "https://github.com/demo-owner/pr-reality-check-demo/blob/b45e0000000000000000000000000000000000aa/src/config.js#L2",
+      "text": "Changed symbol REQUEST_TIMEOUT_MS; in src/config.js:2; community HTTP Routing; degree 1; NOT in the issue area",
+      "file": "src/config.js",
+      "lines": "L2",
+      "node": "config_request_timeout_ms"
+    },
+    {
+      "id": "E5",
+      "kind": "touched_node",
+      "url": "https://github.com/demo-owner/pr-reality-check-demo/blob/b45e0000000000000000000000000000000000aa/src/http/middleware.js#L9",
+      "text": "Changed symbol withTimeout(); in src/http/middleware.js:9; community HTTP Routing; degree 2; NOT in the issue area",
+      "file": "src/http/middleware.js",
+      "lines": "L9",
+      "node": "middleware_withtimeout"
+    },
+    {
+      "id": "E6",
+      "kind": "touched_node",
+      "url": "https://github.com/demo-owner/pr-reality-check-demo/blob/b45e0000000000000000000000000000000000aa/src/http/router.js#L1",
+      "text": "File-level change router.js; in src/http/router.js:1; community HTTP Routing; degree 4; NOT in the issue area",
+      "file": "src/http/router.js",
+      "lines": "L1",
+      "node": "src_http_router"
+    },
+    {
+      "id": "E7",
+      "kind": "touched_node",
+      "url": "https://github.com/demo-owner/pr-reality-check-demo/blob/b45e0000000000000000000000000000000000aa/src/http/router.js#L19",
+      "text": "Changed symbol dispatch(); in src/http/router.js:19; community HTTP Routing; degree 4 (GOD NODE: among the most connected symbols); NOT in the issue area",
+      "file": "src/http/router.js",
+      "lines": "L19",
+      "node": "router_dispatch"
+    },
+    {
+      "id": "E8",
+      "kind": "diff_hunk",
+      "url": "https://github.com/demo-owner/pr-reality-check-demo/blob/b0b0000000000000000000000000000000000003/src/config.js#L1-L2",
+      "text": "src/config.js (maps to: REQUEST_TIMEOUT_MS)\n@@ -1,2 +1,2 @@\n export const SESSION_TTL_SECONDS = 3600;\n-export const REQUEST_TIMEOUT_MS = 5000;\n+export const REQUEST_TIMEOUT_MS = 30000;",
+      "file": "src/config.js",
+      "lines": "L1-L2",
+      "node": "config_request_timeout_ms"
+    },
+    {
+      "id": "E9",
+      "kind": "diff_hunk",
+      "url": "https://github.com/demo-owner/pr-reality-check-demo/blob/b0b0000000000000000000000000000000000003/src/http/middleware.js#L9-L15",
+      "text": "src/http/middleware.js (maps to: withTimeout())\n@@ -9,7 +9,9 @@ export function requireAuth(req) {\n export function withTimeout(handler) {\n   return async (req) => {\n-    const timer = new Promise((_, reject) =>\n-      setTimeout(() => reject(new Error('504 Timeout')), REQUEST_TIMEOUT_MS));\n-    return Promise.race([handler(req), timer]);\n+    let timeoutId;\n+    const timer = new Promise((_, reject) => {\n+      timeoutId = setTimeout(() => reject(new Error('504 Timeout')), REQUEST_TIMEOUT_MS);\n+    });\n+    return Promise.race([handler(req), timer]).finally(() => clearTimeout(timeoutId));\n  …",
+      "file": "src/http/middleware.js",
+      "lines": "L9-L15",
+      "node": "middleware_withtimeout"
+    },
+    {
+      "id": "E10",
+      "kind": "diff_hunk",
+      "url": "https://github.com/demo-owner/pr-reality-check-demo/blob/b0b0000000000000000000000000000000000003/src/http/router.js#L16-L36",
+      "text": "src/http/router.js (maps to: router.js, dispatch())\n@@ -16,12 +16,24 @@ export function handleProfile(req) {\n   return { status: 200, body: { ok: true } };\n }\n\n+async function retryDispatch(handler, req, attempts = 2) {\n+  let lastErr;\n+  for (let i = 0; i < attempts; i++) {\n+    try {\n+      return await withTimeout(handler)(req);\n+    } catch (err) {\n+      lastErr = err;\n+    }\n+  }\n+  throw lastErr;\n+}\n+\n export async function dispatch(req) {\n   const routes = { 'POST /login': handleLogin, 'GET /profile': handleProfile, 'GET /health': health };\n   const handler = routes[`${req.method} ${r…",
+      "file": "src/http/router.js",
+      "lines": "L16-L36",
+      "node": "src_http_router"
+    },
+    {
+      "id": "E11",
+      "kind": "graph_path",
+      "url": "https://github.com/demo-owner/pr-reality-check-demo/blob/b45e0000000000000000000000000000000000aa/src/config.js#L2",
+      "text": "No call-graph path within 4 hops from REQUEST_TIMEOUT_MS to any issue anchor.",
+      "node": "config_request_timeout_ms"
+    },
+    {
+      "id": "E12",
+      "kind": "graph_path",
+      "url": "https://github.com/demo-owner/pr-reality-check-demo/blob/b45e0000000000000000000000000000000000aa/src/http/middleware.js#L9",
+      "text": "Call-graph path from withTimeout() to issue anchor createSession(): withTimeout() — dispatch() — handleLogin() — login() — createSession() (4 hop(s)).",
+      "node": "middleware_withtimeout"
+    },
+    {
+      "id": "E13",
+      "kind": "graph_path",
+      "url": "https://github.com/demo-owner/pr-reality-check-demo/blob/b45e0000000000000000000000000000000000aa/src/http/router.js#L19",
+      "text": "Call-graph path from dispatch() to issue anchor createSession(): dispatch() — handleLogin() — login() — createSession() (3 hop(s)).",
+      "node": "router_dispatch"
+    },
+    {
+      "id": "E14",
+      "kind": "blast_radius",
+      "url": "https://github.com/demo-owner/pr-reality-check-demo/pull/3/files",
+      "text": "4 dependent(s) within 2 hops may be affected: authService.js (src/auth/authService.js) d1, middleware.js (src/http/middleware.js) d1, router.test.js (tests/router.test.js) d1, auth.test.js (tests/auth.test.js) d2.\nTests to run: tests/auth.test.js, tests/router.test.js.\nEdge confidence: EXTRACTED 4."
+    },
+    {
+      "id": "E15",
+      "kind": "coverage_gap",
+      "url": "https://github.com/demo-owner/pr-reality-check-demo/pull/3/files",
+      "text": "New symbols not in the base graph: retryDispatch."
+    }
+  ],
+  "rulePriority": "likely_off_target",
+  "assessment": {
+    "claim_summary": "The PR says the 5 s request timeout causes the logout in issue #1 and raises it to 30 s with a retry.",
+    "reality_summary": "The change touches dispatch(), withTimeout() and REQUEST_TIMEOUT_MS, none of which are in the issue area around validate(), isExpired() and createSession().",
+    "findings": [
+      {
+        "text": "Relevance is 0.00: none of the 3 changed symbols are in the issue area.",
+        "severity": "risk",
+        "evidence": [
+          "E3"
+        ]
+      },
+      {
+        "text": "dispatch() is a god node; changing it may affect every route.",
+        "severity": "warn",
+        "evidence": [
+          "E7",
+          "E14"
+        ]
+      },
+      {
+        "text": "The issue stack frame points at validate() in src/auth/authService.js:13.",
+        "severity": "info",
+        "evidence": [
+          "E1",
+          "E2"
+        ]
+      }
+    ],
+    "tests": [
+      {
+        "kind": "existing",
+        "name": "tests/router.test.js",
+        "reason": "Imports the changed router.",
+        "evidence": [
+          "E14"
+        ]
+      },
+      {
+        "kind": "proposed",
+        "name": "session stays valid 5 s after login",
+        "reason": "Reproduces issue #1.",
+        "evidence": [
+          "E1"
+        ]
+      }
+    ],
+    "questions_for_contributor": [
+      "How does a longer request timeout change when isExpired() returns true?"
+    ],
+    "suggested_priority": "likely_off_target",
+    "confidence": "high",
+    "limitations": [
+      "Relevance only; correctness not checked.",
+      "3 model statement(s) were dropped because they did not cite valid evidence.",
+      "Relevance is not correctness: this card does not say whether the change works."
+    ]
+  },
+  "finalPriority": "likely_off_target",
+  "priorityReason": "Touches none of the issue's code; relevance 0.00, 4 changed item(s) outside the issue area.",
+  "_synthetic": true
+}
