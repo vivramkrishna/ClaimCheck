@@ -8,7 +8,7 @@
 - `server/gemma.js` + `prompts/review.txt` — Gemma 4 call (system-instruction fallback, retry, timeout, thinking switch), JSON extraction, coercion, zod validation, one repair, citation filter, confidence cap, deterministic fallback, diff-only contents.
 - `server/analyze.js` — `PROMPT_VERSION`, `analyze(input)` (never throws), `computeDeterministic(input)` for debugging.
 - `scripts/check.js` — debug CLI incl. `--inspect <graph.json>` for the 11:25 checklist.
-- `test/core/**` — 33 tests (+1 opt-in generator), synthetic graph and A/B/C inputs, `card.B.generated.json` sample.
+- `test/core/**` — 31 tests (+1 opt-in generator), synthetic graph and A/B/C inputs, `card.B.generated.json` sample.
 
 **Verified:** `npm test` green (A→review_first, B→likely_off_target, C→possible_duplicate of A; fallback + diff-only cards pass `CardSchema`).
 **Not verified:** a live Gemma call. `@google/genai` could not be installed in my sandbox (registry blocked), so `createGemmaClient` is untested against the real API. First thing to run once merged with a key set:
