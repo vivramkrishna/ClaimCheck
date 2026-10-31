@@ -1,0 +1,458 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PR Reality Check evidence card",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "pr": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "headSha": {
+          "type": "string"
+        },
+        "comparisonBaseSha": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "number",
+        "headSha",
+        "comparisonBaseSha"
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "live",
+            "cached",
+            "replay",
+            "model_unavailable"
+          ]
+        },
+        "generatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "promptVersion": {
+          "type": "string"
+        },
+        "graphSourceSha": {
+          "type": "string"
+        },
+        "graphHash": {
+          "type": "string"
+        },
+        "graphifyVersion": {
+          "type": "string"
+        },
+        "graphSchemaVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "inputsHash": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "generatedAt",
+        "model",
+        "promptVersion",
+        "graphSourceSha",
+        "graphHash",
+        "graphifyVersion",
+        "graphSchemaVersion",
+        "inputsHash"
+      ]
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mapping": {
+          "type": "string",
+          "enum": [
+            "symbol",
+            "file",
+            "mixed",
+            "unknown"
+          ]
+        },
+        "graphMatchesComparisonBase": {
+          "type": "boolean"
+        },
+        "mappedFiles": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "changedFiles": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unmappedFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "mapping",
+        "graphMatchesComparisonBase",
+        "mappedFiles",
+        "changedFiles",
+        "unmappedFiles",
+        "truncated",
+        "limitations"
+      ]
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "structuralOverlap": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "resolvedIssueAnchors": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "changedSymbols": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "potentialDependents": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxDepth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "impactTruncated": {
+          "type": "boolean"
+        },
+        "openPrsScanned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "openPrsTotal": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      },
+      "required": [
+        "structuralOverlap",
+        "resolvedIssueAnchors",
+        "changedSymbols",
+        "potentialDependents",
+        "maxDepth",
+        "impactTruncated",
+        "openPrsScanned",
+        "openPrsTotal"
+      ]
+    },
+    "overlaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "prNumber": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "label": {
+            "type": "string",
+            "enum": [
+              "possible_duplicate",
+              "shared_area"
+            ]
+          },
+          "symbolJaccard": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "sharedFiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sharedSymbols": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidenceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "prNumber",
+          "label",
+          "symbolJaccard",
+          "sharedFiles",
+          "sharedSymbols",
+          "evidenceIds"
+        ]
+      }
+    },
+    "assessment": {
+      "$ref": "#/$defs/assessment"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evidence"
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "pr",
+    "provenance",
+    "coverage",
+    "metrics",
+    "overlaps",
+    "assessment",
+    "evidence"
+  ],
+  "$defs": {
+    "assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "claim": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "reality": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "review_first",
+            "needs_context",
+            "likely_off_target"
+          ]
+        },
+        "confidence": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "evidenceIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "uniqueItems": true
+              }
+            },
+            "required": [
+              "text",
+              "evidenceIds"
+            ]
+          },
+          "maxItems": 5
+        },
+        "tests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "existing",
+                  "proposed"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "evidenceIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "uniqueItems": true
+              }
+            },
+            "required": [
+              "kind",
+              "name",
+              "reason",
+              "evidenceIds"
+            ]
+          },
+          "maxItems": 5
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "claim",
+        "reality",
+        "priority",
+        "confidence",
+        "findings",
+        "tests",
+        "limitations"
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "issue_quote",
+            "pr_claim",
+            "diff",
+            "source",
+            "graph_path",
+            "test_result"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "startLine": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "endLine": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "sourceSha": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "graphConfidence": {
+          "enum": [
+            "EXTRACTED",
+            "INFERRED",
+            "AMBIGUOUS",
+            null
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "text",
+        "url",
+        "file",
+        "startLine",
+        "endLine",
+        "sourceSha",
+        "graphConfidence"
+      ]
+    }
+  }
+}
