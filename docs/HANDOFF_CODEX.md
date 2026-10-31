@@ -10,6 +10,13 @@
 - Mobile-first, one-file evidence UI with safe text rendering and GitHub-only evidence links.
 - Replay warmer, contributor skill, tests, deploy instructions, MIT license, and synthetic demo repository.
 
+Prepared demo refs:
+
+- `main` — `c94cfc3` (`chore: add synthetic session demo fixture`)
+- `fix/session-ttl-ms` — `e819a32`
+- `fix/login-timeout` — `c74370f`
+- `fix-expiry-units` — `149b675`
+
 ## Run it
 
 ```bash
