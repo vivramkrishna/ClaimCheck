@@ -36,7 +36,7 @@
         </div>
       </div>
       <div class="flex shrink-0 items-center gap-2 sm:gap-3">
-        <span class="hidden items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-400 sm:inline-flex"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Evidence-led review</span>
+        <span class="hidden items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-500 sm:inline-flex"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Evidence-led review</span>
         <a href="/graph" target="_blank" rel="noreferrer" class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">Explore code graph ↗</a>
       </div>
     </div>
@@ -44,8 +44,8 @@
 
   <main class="mx-auto grid max-w-[1440px] gap-5 px-4 py-7 sm:px-6 lg:grid-cols-[290px_minmax(0,1fr)] lg:px-8">
     <section class="col-span-full flex flex-col justify-between gap-4 pb-1 xl:flex-row xl:items-end">
-      <div><p class="section-kicker">Pull request intelligence</p><h1 class="mt-2 text-3xl font-black tracking-[-.045em] text-slate-950 sm:text-4xl">Review with <span class="text-blue-700">evidence.</span></h1><p class="mt-2 max-w-2xl text-sm leading-6 text-slate-400 sm:text-base">Connect the contributor’s claim to the linked issue and the code that actually changed. Keep the maintainer in control.</p></div>
-      <div class="flex flex-wrap gap-2"><span class="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-400">Graphify structure</span><span class="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-400">Gemma 4 reasoning</span><span class="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-400">Human decision</span></div>
+      <div><p class="section-kicker">Pull request intelligence</p><h1 class="mt-2 text-3xl font-black tracking-[-.045em] text-slate-950 sm:text-4xl">Review with <span class="text-blue-700">evidence.</span></h1><p class="mt-2 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">Connect the contributor’s claim to the linked issue and the code that actually changed. Keep the maintainer in control.</p></div>
+      <div class="flex flex-wrap gap-2"><span class="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-500">Graphify structure</span><span class="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-500">Gemma 4 reasoning</span><span class="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-500">Human decision</span></div>
     </section>
     <aside class="rounded-2xl border border-slate-200 bg-white p-4 lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)]">
       <div class="flex items-center justify-between">
@@ -66,7 +66,7 @@
             <button id="mode-diffonly" type="button" class="rounded-xl px-4 py-3 text-left text-sm font-bold transition">Diff-only review (what generic reviewers see)</button>
           </div>
           <div class="flex flex-wrap items-center gap-3">
-            <label class="flex cursor-pointer items-center gap-2 text-sm text-slate-400">
+            <label class="flex cursor-pointer items-center gap-2 text-sm text-slate-500">
               <input id="replay" type="checkbox" class="h-4 w-4 rounded border-slate-600 bg-slate-100 text-amber-500 focus:ring-amber-500">
               Replay mode
             </label>
@@ -75,7 +75,7 @@
         </div>
       </div>
 
-      <div id="status" class="mt-5 rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-400" aria-live="polite">Choose a pull request to begin.</div>
+      <div id="status" class="mt-5 rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500" aria-live="polite">Choose a pull request to begin.</div>
       <article id="card" class="mt-5 hidden space-y-5" aria-live="polite"></article>
     </section>
   </main>
@@ -132,7 +132,7 @@
       return element('p', 'mt-3 text-sm text-slate-500', text);
     }
 
-    function pill(text, classes = 'bg-slate-100 text-slate-400') {
+    function pill(text, classes = 'bg-slate-100 text-slate-500') {
       return element('span', `inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${classes}`, text);
     }
 
@@ -159,10 +159,10 @@
         const fromModel = provenance.assessmentSource === 'model';
         left.append(pill(fromModel ? 'Gemma 4' : 'Evidence only (model output rejected)', fromModel ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-800'));
       }
-      left.append(element('span', 'text-xs text-slate-400', `Model: ${value(provenance.model)}`));
+      left.append(element('span', 'text-xs text-slate-500', `Model: ${value(provenance.model)}`));
       if (provenance.promptVersion) left.append(element('span', 'text-[11px] text-slate-500', `Prompt: ${provenance.promptVersion}`));
       const commit = provenance.graphCommit ? String(provenance.graphCommit).slice(0, 8) : 'none';
-      left.append(element('span', 'text-xs text-slate-400', `Graph: ${commit}`));
+      left.append(element('span', 'text-xs text-slate-500', `Graph: ${commit}`));
       wrapper.append(left);
       wrapper.append(element('time', 'text-xs text-slate-500', `Generated: ${value(provenance.generatedAt)}`));
       return wrapper;
@@ -217,7 +217,7 @@
       findings.forEach((finding) => {
         const item = element('div', `rounded-xl border p-4 ${colors[finding.severity] ?? colors.info}`);
         const top = element('div', 'flex items-start gap-3');
-        top.append(pill(value(finding.severity, 'info').toUpperCase(), finding.severity === 'risk' ? 'bg-rose-100 text-rose-950' : finding.severity === 'warn' ? 'bg-amber-100 text-amber-950' : 'bg-sky-400 text-sky-950'));
+        top.append(pill(value(finding.severity, 'info').toUpperCase(), finding.severity === 'risk' ? 'bg-rose-100 text-rose-950' : finding.severity === 'warn' ? 'bg-amber-100 text-amber-950' : 'bg-blue-100 text-blue-900'));
         top.append(element('p', 'text-sm leading-6 text-slate-900', value(finding.text)));
         item.append(top);
         const chips = element('div', 'mt-3 flex flex-wrap gap-2');
@@ -290,7 +290,7 @@
       wrapper.append(grid);
       if (coverage.graphStale) wrapper.append(element('p', 'mt-4 rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-800', 'Stale-graph warning: the graph commit does not match the pull request base.'));
       const additions = element('div', 'mt-4 flex flex-wrap gap-2');
-      additions.append(element('span', 'text-sm font-bold text-slate-400', 'Unmapped additions:'));
+      additions.append(element('span', 'text-sm font-bold text-slate-500', 'Unmapped additions:'));
       if ((coverage.unmappedAdditions ?? []).length) coverage.unmappedAdditions.forEach((item) => additions.append(pill(item)));
       else additions.append(element('span', 'text-sm text-slate-500', 'None'));
       wrapper.append(additions);
@@ -349,7 +349,7 @@
       if (!items?.length) { wrapper.append(empty(fallback)); return wrapper; }
       const list = element('ul', 'mt-4 space-y-2');
       items.forEach((item) => {
-        const row = element('li', 'flex gap-3 rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-400');
+        const row = element('li', 'flex gap-3 rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-500');
         row.append(element('span', 'font-black text-blue-700', '→'));
         row.append(element('span', '', item));
         list.append(row);
@@ -370,7 +370,7 @@
         head.append(pill(value(record.kind).replaceAll('_', ' ')));
         if (record.file) head.append(element('span', 'text-xs text-slate-500', `${record.file}${record.lines ? ` · ${record.lines}` : ''}`));
         row.append(head);
-        row.append(element('p', 'mt-3 text-sm leading-6 text-slate-400', value(record.text)));
+        row.append(element('p', 'mt-3 text-sm leading-6 text-slate-500', value(record.text)));
         const url = safeGithubUrl(record.url);
         if (url) {
           const link = element('a', 'mt-3 inline-flex text-xs font-bold text-blue-700 hover:text-blue-800', 'Open evidence on GitHub ↗');
@@ -407,7 +407,7 @@
       cardRoot.classList.add('hidden');
       statusRoot.classList.remove('hidden');
       statusRoot.textContent = message;
-      statusRoot.className = `mt-5 rounded-2xl border p-8 text-center ${kind === 'error' ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-slate-200 bg-white text-slate-400'}`;
+      statusRoot.className = `mt-5 rounded-2xl border p-8 text-center ${kind === 'error' ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-slate-200 bg-white text-slate-500'}`;
     }
 
     function updateUrl() {
@@ -422,7 +422,7 @@
       ['graph', 'diffonly'].forEach((mode) => {
         const button = byId(`mode-${mode}`);
         const active = state.mode === mode;
-        button.className = `rounded-xl px-4 py-3 text-left text-sm font-bold transition ${active ? 'bg-sky-400 text-sky-950' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`;
+        button.className = `rounded-xl px-4 py-3 text-left text-sm font-bold transition ${active ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`;
         button.setAttribute('aria-pressed', String(active));
       });
       byId('replay').checked = state.replay;
