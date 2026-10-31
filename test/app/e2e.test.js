@@ -152,7 +152,9 @@ test('/graph serves graph.html and / serves the UI', async () => {
   const csp = ui.headers.get('content-security-policy');
   const body = await ui.text();
   const nonce = body.match(/<script nonce="([^"]+)">/)?.[1];
-  assert.match(body, /PR Reality Check/);
+  assert.match(body, /CLAIMTRACE/);
+  assert.match(body, /Pull request intelligence/);
+  assert.match(body, /id="pr-search"/);
   assert.ok(nonce);
   assert.ok(csp.includes(`'nonce-${nonce}'`));
 });
