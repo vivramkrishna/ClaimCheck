@@ -1,6 +1,6 @@
 **Build a focused evidence checker for one demo repository.** Use React + Express on Cloudways, generate Graphify data locally, and make one Gemma call per review. Your strongest feature is a source-linked explanation of whether the patch supports its claim.
 
-Saved: [complete build brief](/home/vivek/Work/code/mlh_hack_comms/resources/pr-reality-check-build-plan.md), [system prompt](/home/vivek/Work/code/mlh_hack_comms/resources/pr-reality-check-system-prompt.txt), and [validated JSON Schema](/home/vivek/Work/code/mlh_hack_comms/resources/pr-reality-check-evidence.schema.json). These are planning artifacts; the application is not built or deployed.
+Saved: [complete build brief](../research/pr-reality-check-build-plan.md), [system prompt](../research/pr-reality-check-system-prompt.txt), and [validated JSON Schema](../research/pr-reality-check-evidence.schema.json). These are planning artifacts; the application is not built or deployed.
 
 **1. High-level design**
 
@@ -143,9 +143,9 @@ Label these synthetic fixtures. Display measured counts; do not invent “131 de
 
 **10. Sample artifacts**
 
-The [ready-to-copy system prompt](/home/vivek/Work/code/mlh_hack_comms/resources/pr-reality-check-system-prompt.txt) requires evidence citations, distinguishes relevance from correctness, and abstains when context is insufficient.
+The [ready-to-copy system prompt](../research/pr-reality-check-system-prompt.txt) requires evidence citations, distinguishes relevance from correctness, and abstains when context is insufficient.
 
-The [JSON Schema](/home/vivek/Work/code/mlh_hack_comms/resources/pr-reality-check-evidence.schema.json) passed Draft 2020-12 schema validation. Its structure is:
+The [JSON Schema](../research/pr-reality-check-evidence.schema.json) passed Draft 2020-12 schema validation. Its structure is:
 
 ```text
 Server-owned:

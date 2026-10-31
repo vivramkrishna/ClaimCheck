@@ -44,7 +44,7 @@ Exact environment variables:
 
 ## Contract questions
 
-- The prompt referenced `docs/FINAL_HLD.md`, but the repository stores the read-only design at `HLD/FINAL_HLD.md`. Implementation used that file.
+- The prompt referenced `docs/FINAL_HLD.md`, but the repository stores the read-only design at `HLD/FINAL_HLD.md` (now moved to `docs/FINAL_HLD.md`). Implementation used that file.
 - No shared-contract changes were required.
 
 ## User checklist

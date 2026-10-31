@@ -4,15 +4,14 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const cacheDir = path.join(root, 'data', 'cache');
+// CACHE_DIR overrides the runtime cache location (dev-offline uses a temp dir so synthetic cards never mix with real ones).
+const cacheDir = process.env.CACHE_DIR ? path.resolve(process.env.CACHE_DIR) : path.join(root, 'data', 'cache');
 const replayDir = path.join(root, 'data', 'replay');
 
-let promptVersion = 'stub';
-try {
-  ({ PROMPT_VERSION: promptVersion } = await import('./analyze.js'));
-} catch {
-  ({ PROMPT_VERSION: promptVersion } = await import('./analyze.stub.js'));
-}
+import { loadAnalyzer } from './load-analyzer.js';
+
+const { analyzer } = await loadAnalyzer();
+const promptVersion = analyzer.PROMPT_VERSION;
 
 export function cacheKey(input, options = {}) {
   const version = options.promptVersion ?? promptVersion;

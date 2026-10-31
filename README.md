@@ -94,6 +94,43 @@ node scripts/warm-cache.js https://<cloudways-url>   # record replay cards for t
 
 If GitHub is unreachable during the demo, `/api/prs` falls back to the recorded replay cards and the UI switches to the amber REPLAY mode automatically.
 
+## Project structure
+
+```
+server/                    Node ESM, no build step
+  index.js                 Express: /api/health, /api/prs, /api/analyze/:n, /graph, static UI
+  input.js                 buildInput(pr, mode): PR + files + linked issue + open PRs + graph
+  github.js                GitHub REST/GraphQL via fetch (read-only)
+  cache.js                 cache key, data/cache, data/replay
+  load-analyzer.js         loads analyze.js (stub only if the file is missing)
+  analyze.js               core engine orchestrator: AnalyzeInput -> Card (never throws)
+  graph.js                 Graphify graph.json normalize, diff -> nodes, blast radius, god nodes
+  issue.js                 issue anchors (stack frames, `names`, paths)
+  evidence.js              metrics, rule priority, duplicates, E1..En evidence with URLs
+  gemma.js                 Gemma 4 call, JSON repair, citation filter, fallback
+  schema.js                zod Card / Assessment schemas
+  analyze.stub.js          synthetic stand-in (unused while analyze.js exists)
+prompts/review.txt         Gemma system prompt
+public/index.html          evidence card UI (Tailwind CDN + vanilla JS)
+data/
+  graph.json graph.html manifest.json   from Graphify (scripts/import-graph.sh)
+  cache/                   runtime cache (git-ignored)
+  replay/                  recorded genuine cards for ?replay=1 (committed)
+  fixtures/                synthetic sample cards for the stub
+scripts/
+  import-graph.sh          Graphify on demo main -> data/ + manifest + graph checklist
+  check.js                 debug CLI: npm run check -- <pr> [--no-llm] | --inspect data/graph.json
+  warm-cache.js            record replay cards from a live URL
+  dev-offline.js           whole app on synthetic fixtures, no keys
+skills/pr-reality-check/   contributor agent skill (SKILL.md)
+test/core/                 engine tests + synthetic Graphify graph and PR A/B/C inputs
+test/app/                  routes, GitHub, cache, end-to-end HTTP tests
+docs/                      setup checklist, HLD, decisions, handoffs, research (see docs/README.md)
+archive/                   git-ignored reference copies of the core-engine downloads
+```
+
+Scripts: `npm start`, `npm test` (or `test:core` / `test:app`), `npm run dev:offline`, `npm run check -- <pr>`, `npm run graph:import -- ../pr-reality-check-demo`, `npm run replay:warm -- https://<url>`.
+
 ## Contributor agent skill
 
 [`skills/pr-reality-check/SKILL.md`](skills/pr-reality-check/SKILL.md) is a reusable self-check for contributors preparing a PR that claims to fix an issue. It asks for anchors, changed functions, paths, callers, unexplained changes, and tests before a PR is opened.

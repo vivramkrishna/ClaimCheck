@@ -22,7 +22,7 @@ await writeFile(path.join(dir, 'manifest.json'), JSON.stringify({
 await writeFile(path.join(dir, 'graph.html'), '<!doctype html><meta charset="utf-8"><title>Synthetic graph</title><p>Offline mode: run Graphify on the demo repo to get the real graph.html.</p>');
 
 Object.assign(process.env, {
-  GRAPH_DATA_DIR: dir, DEMO_REPO_OWNER: 'demo-owner', DEMO_REPO_NAME: 'pr-reality-check-demo',
+  GRAPH_DATA_DIR: dir, CACHE_DIR: path.join(dir, 'cache'), DEMO_REPO_OWNER: 'demo-owner', DEMO_REPO_NAME: 'pr-reality-check-demo',
   GITHUB_TOKEN: 'offline', GEMINI_API_KEY: process.env.OFFLINE_USE_GEMINI === '1' ? (process.env.GEMINI_API_KEY ?? '') : '',
 });
 

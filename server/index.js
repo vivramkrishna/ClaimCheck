@@ -6,18 +6,13 @@ import path from 'node:path';
 import { buildInput, graphDataDir } from './input.js';
 import { cacheKey, get as getCache, getReplay, listReplays, set as setCache } from './cache.js';
 import { listOpenPRs, resolveLinkedIssue } from './github.js';
+import { loadAnalyzer } from './load-analyzer.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const packageJson = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 
-let analyzer;
-export let analyzerKind = 'real';
-try {
-  analyzer = await import('./analyze.js');
-} catch {
-  analyzer = await import('./analyze.stub.js');
-  analyzerKind = 'stub';
-}
+const { analyzer, kind: loadedKind } = await loadAnalyzer();
+export const analyzerKind = loadedKind;
 
 export const app = express();
 app.disable('x-powered-by');

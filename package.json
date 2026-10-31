@@ -12,7 +12,11 @@
     "start": "node server/index.js",
     "test": "node --test",
     "check": "node scripts/check.js",
-    "dev:offline": "node scripts/dev-offline.js"
+    "dev:offline": "node scripts/dev-offline.js",
+    "test:core": "node --test \"test/core/**/*.test.js\"",
+    "test:app": "node --test \"test/app/**/*.test.js\"",
+    "graph:import": "bash scripts/import-graph.sh",
+    "replay:warm": "node scripts/warm-cache.js"
   },
   "dependencies": {
     "@google/genai": "^1.27.0",
