@@ -407,9 +407,14 @@
     async function boot() {
       updateControls();
       try {
-        const [healthResponse, prsResponse] = await Promise.all([fetch('/api/health'), fetch('/api/prs')]);
+        const healthResponse = await fetch('/api/health');
         const health = await healthResponse.json();
         byId('health').textContent = health.ok ? `${String(health.analyzer).toUpperCase()} · v${health.version}` : 'Unavailable';
+      } catch {
+        byId('health').textContent = 'Unavailable';
+      }
+      try {
+        const prsResponse = await fetch('/api/prs');
         const prs = await prsResponse.json();
         if (!prsResponse.ok) throw new Error(prs.error ?? 'Could not load pull requests.');
         state.prs = prs;
@@ -417,9 +422,9 @@
         renderPRs();
         if (state.selected) await loadCard();
       } catch (error) {
-        byId('health').textContent = 'Needs setup';
         renderPRs();
-        setStatus(error.message, 'error');
+        if (state.selected && state.replay) await loadCard();
+        else setStatus(error.message, 'error');
       }
     }
 
